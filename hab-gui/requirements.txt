@@ -1,4 +1,26 @@
+# Python packages installable via pip
 PySide6>=6.5
-bleak>=0.22.2
-qasync>=0.27.1
-pyobjc>=10.1
+numpy>=1.24.0
+pyqtgraph>=0.13.0
+
+# IMPORTANT: GNU Radio and SoapySDR are NOT pip-installable
+# They must be system-installed first via Homebrew on macOS
+#
+# Installation Steps:
+# 1. Install system dependencies via Homebrew:
+#    brew install gnuradio soapysdr soapyhackrf hackrf
+#
+# 2. Create virtual environment with --system-site-packages flag:
+#    python3 -m venv .venv --system-site-packages
+#    source .venv/bin/activate
+#
+#    This flag is REQUIRED to access the system-installed GNU Radio and SoapySDR
+#    libraries from within the virtual environment.
+#
+# 3. Install Python-only packages:
+#    pip install -r requirements.txt
+#
+# Why --system-site-packages?
+# - GNU Radio is installed system-wide by Homebrew (not in venv)
+# - This flag allows the venv to import system-installed packages
+# - Without this flag, Python won't be able to find GNU Radio modules
