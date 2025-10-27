@@ -12,6 +12,14 @@ This project uses the [Zephyr RTOS](https://docs.zephyrproject.org/latest/develo
 - CMake 3.20.5 or later
 - Devicetree compiler 1.4.6 or later
 
+### Espressif HAL Prerequisites
+
+Espressif HAL requires WiFi and Bluetooth binary blobs in order to work. Run the command below to retrieve those files.
+
+```bash
+west blobs fetch hal_espressif
+```
+
 ### Setup Instructions
 
 1. **Install dependencies** (macOS):
@@ -47,6 +55,11 @@ This project uses the [Zephyr RTOS](https://docs.zephyrproject.org/latest/develo
    ```bash
    cd zephyr
    west sdk install
+   ```
+
+7. **Fetch Espressif HAL blobs**:
+   ```bash
+   west blobs fetch hal_espressif
    ```
 
 ### Building and Flashing
