@@ -27,8 +27,7 @@ This project builds a high‑altitude balloon payload and matching ground statio
   - Provide real‑time spectrum analysis and monitoring
   - Display and log telemetry
 
-## Repository Structure
-
+## Repository Structure (empty, still building out)
 ```
 hab/
 ├── hab-gui/          # Ground station GUI (PySide6 + GNU Radio + SoapySDR)
