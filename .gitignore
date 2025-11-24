@@ -1,0 +1,41 @@
+# Misc
+hackrf-master/
+
+# Build artifacts and generated files
+build/
+outdir/
+outdir-*/
+*.o
+*.a
+*.d
+*.cmd
+*.log
+*.pyc
+
+# Cache and temporary files
+.cache/
+*.swp
+*.swo
+*~
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+.settings/
+.clangd
+.dir
+
+# West workspace - ignore all Zephyr SDK, modules, bootloader, and tools
+hab-esp32/bootloader/
+hab-esp32/modules/
+hab-esp32/zephyr/
+hab-esp32/tools/
+*.west/
+
+# OS files
+.DS_Store
+Thumbs.db
