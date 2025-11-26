@@ -47,6 +47,9 @@ struct ContentView: View {
     
     // GPS track history for drawing path
     @State private var gpsTrack: [CLLocationCoordinate2D] = []
+    
+    // Settings sheet presentation
+    @State private var showSettings = false
 
 
 
@@ -160,11 +163,10 @@ struct ContentView: View {
         GeometryReader { geometry in
             ZStack {
                 // Background image
-                //StarfieldView()
-                //    .ignoresSafeArea()
-                Color.black
+                StarfieldView()
                     .ignoresSafeArea()
-
+                //Color.black
+                    
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         // Header
@@ -676,10 +678,51 @@ struct ContentView: View {
                     .padding(.bottom, 30)
                 }
                 .frame(maxWidth: .infinity)
+                
+                // Floating Settings Button
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showSettings = true
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background {
+                                    ZStack {
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                        Circle()
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(0.4),
+                                                        Color.white.opacity(0.1),
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 1
+                                            )
+                                    }
+                                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 20)
+                        .padding(.trailing, 30)
+                    }
+                    Spacer()
+                }
             }
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
         .onAppear {       
             // Start timer for 1Hz updates
             updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in

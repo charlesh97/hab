@@ -1,0 +1,59 @@
+id: dvbs2rx_symbol_sync_cc
+label: Symbol Synchronizer
+category: '[Core]/Digital Television/DVB-S2'
+
+templates:
+  imports: from gnuradio import dvbs2rx
+  make: dvbs2rx.symbol_sync_cc(${sps}, ${loop_bw}, ${damping_factor}, ${rolloff}, ${rrc_delay}, ${n_subfilt}, ${interp_method.val})
+
+parameters:
+- id: sps
+  label: Oversampling Factor
+  dtype: int
+  default: 2
+- id: loop_bw
+  label: Loop Bandwidth
+  dtype: float
+  default: 0.01
+- id: damping_factor
+  label: Damping Factor
+  dtype: float
+  default: 1.0
+- id: rolloff
+  label: RRC Rolloff Factor
+  dtype: float
+  default: 0.2
+- id: rrc_delay
+  label: RRC Filter Delay
+  dtype: int
+  default: 5
+  hide: ${interp_method.hide}
+- id: n_subfilt
+  label: Polyphase Subfilters
+  dtype: int
+  default: 128
+  hide: ${interp_method.hide}
+- id: interp_method
+  label: Interpolation Method
+  dtype: enum
+  options: [INTERP_POLYPHASE, INTERP_LINEAR, INTERP_QUADRATIC, INTERP_CUBIC]
+  option_labels: ["Polyphase", "Linear", "Quadratic", "Cubic"]
+  option_attributes:
+    val: [0, 1, 2, 3]
+    hide: [none, all, all, all]
+
+inputs:
+- label: in
+  domain: stream
+  dtype: complex
+  vlen: 1
+  optional: 0
+
+outputs:
+- label: out
+  domain: stream
+  dtype: complex
+  vlen: 1
+  optional: 0
+
+file_format: 1

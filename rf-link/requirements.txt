@@ -1,0 +1,11 @@
+# Python dependencies for dvbs2-rx
+# Note: GNU Radio must be installed separately via system packages (e.g., Homebrew)
+
+# Core Python dependencies
+packaging>=21.0
+numpy>=1.19.0  # Required by GNU Radio and gr-dvbs2rx
+matplotlib
+
+# GUI support (optional - comment out if not using GUI features)
+#PyQt5>=5.15.0
+

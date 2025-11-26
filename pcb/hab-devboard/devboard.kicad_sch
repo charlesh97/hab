@@ -7219,30 +7219,6 @@
 			(embedded_fonts no)
 		)
 	)
-	(circle
-		(center 48.26 102.87)
-		(radius 8.9803)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(uuid 4fe15a69-9e43-436c-882b-7caa26213cef)
-	)
-	(circle
-		(center 43.688 26.416)
-		(radius 8.9803)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(uuid eeedb019-161f-4d47-ba3b-1d0c951144b7)
-	)
 	(text "Temp & Accel\nI2C0_M1"
 		(exclude_from_sim no)
 		(at 299.72 26.924 0)
@@ -7272,16 +7248,6 @@
 			)
 		)
 		(uuid "07cbe426-1365-4ffd-be59-344052bdadf2")
-	)
-	(text "CHECK THIS"
-		(exclude_from_sim no)
-		(at 46.482 103.124 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-		)
-		(uuid "1370779f-fde3-4c35-aa9f-3a5ae853fc4b")
 	)
 	(text "External 5V Heater Power"
 		(exclude_from_sim no)
@@ -7332,16 +7298,6 @@
 			)
 		)
 		(uuid "6c80afcd-46ef-4b7b-a380-bf47ee425111")
-	)
-	(text "CHECK THIS"
-		(exclude_from_sim no)
-		(at 41.91 26.67 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-		)
-		(uuid "71260e3c-0657-49aa-a5f1-41f50f1bf816")
 	)
 	(text "External 5V PA Power"
 		(exclude_from_sim no)
@@ -18538,7 +18494,7 @@
 				)
 			)
 		)
-		(property "Value" "MAX17048G+T10"
+		(property "Value" "MAX17049G+T10"
 			(at 65.024 24.638 0)
 			(effects
 				(font

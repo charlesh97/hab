@@ -1,0 +1,8 @@
+*~
+build/
+__pycache__/
+.DS_Store
+TAGS
+apps/*.py
+examples/*.py
+cpu_features/
