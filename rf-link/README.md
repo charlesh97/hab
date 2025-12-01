@@ -364,6 +364,10 @@ python3 dvbs2-tx-mod \
 
 ### Receiving Video
 
+The receiver supports three output modes: file descriptor (stdout), file, or UDP.
+
+#### Receiving to File
+
 ```bash
 # Activate virtual environment and setup environment
 source venv/bin/activate
@@ -386,8 +390,74 @@ python3 dvbs2-rx-mod \
   --log
 ```
 
+#### Receiving to UDP
+
+The receiver can output the MPEG transport stream over UDP, useful for streaming to video players or other applications:
+
+```bash
+# Receive and stream over UDP
+python3 dvbs2-rx-mod \
+  --sink udp \
+  --out-udp 127.0.0.1:2000 \
+  --source hackrf \
+  --hackrf-vga 10 \
+  --hackrf-lna 3 \
+  --hackrf-serial '000000000000000060a464dc3674640f' \
+  --freq 915e6 \
+  --sym-rate 1e6 \
+  --modcod QPSK1/2 \
+  --rolloff 0.35 \
+  --gui \
+  --log
+```
+
+Then play the stream with a video player that supports UDP:
+```bash
+# Using ffplay
+ffplay udp://127.0.0.1:2000
+
+# Using VLC
+vlc udp://@127.0.0.1:2000
+```
+
+**Note**: The UDP sink uses a payload size of 1316 bytes (standard for MPEG-TS over UDP) and sends to the specified IP address and port.
+
+#### Receiving to File Descriptor (stdout)
+
+For piping to other programs or using file descriptor redirection:
+
+```bash
+# Receive to stdout (can be piped or redirected)
+python3 dvbs2-rx-mod \
+  --sink fd \
+  --out-fd 1 \
+  --source hackrf \
+  --hackrf-vga 10 \
+  --hackrf-lna 3 \
+  --freq 915e6 \
+  --sym-rate 1e6 \
+  --modcod QPSK1/2 \
+  --rolloff 0.35 \
+  > video.ts
+
+# Or with file descriptor redirection to separate logs from data
+python3 dvbs2-rx-mod \
+  --sink fd \
+  --out-fd 3 \
+  3>&1 1>&2 \
+  --source hackrf \
+  --freq 915e6 \
+  --sym-rate 1e6 \
+  --modcod QPSK1/2 \
+  > video.ts 2> logs.txt
+```
+
 **Parameters explained**:
 - `--source hackrf`: Use HackRF One as receiver
+- `--sink file|udp|fd`: Output destination (file, UDP, or file descriptor)
+- `--out-file video.ts`: Output file path (when `--sink=file`)
+- `--out-udp IP:PORT`: UDP destination address and port (when `--sink=udp`, e.g., `127.0.0.1:2000`)
+- `--out-fd N`: File descriptor number (when `--sink=fd`, default: 1 for stdout)
 - `--hackrf-lna 3`: LNA gain (3 × 8 = 24 dB, typical values: 0-5)
 - `--gui`: Enable graphical user interface (shows signal quality, spectrum, etc.)
 - `--log`: Print periodic statistics (SNR, frame counts, etc.)

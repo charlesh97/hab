@@ -383,6 +383,26 @@ blocks:
     coordinate: [1240, 396.0]
     rotation: 0
     state: disabled
+- name: network_udp_sink_0
+  id: network_udp_sink
+  parameters:
+    addr: 127.0.0.1
+    affinity: ''
+    alias: ''
+    comment: ''
+    header: '0'
+    payloadsize: '1316'
+    port: '2000'
+    send_eof: 'False'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [872, 416.0]
+    rotation: 0
+    state: enabled
 - name: network_udp_source_0
   id: network_udp_source
   parameters:
@@ -947,6 +967,7 @@ connections:
 - [dtv_dvbs2_physical_cc_0, '0', fft_filter_xxx_0, '0']
 - [fft_filter_xxx_0, '0', blocks_file_sink_0, '0']
 - [fft_filter_xxx_0, '0', iio_pluto_sink_0, '0']
+- [fft_filter_xxx_0, '0', network_udp_sink_0, '0']
 - [fft_filter_xxx_0, '0', qtgui_freq_sink_x_0, '0']
 - [fft_filter_xxx_0, '0', qtgui_waterfall_sink_x_0, '0']
 - [fft_filter_xxx_0, '0', soapy_custom_sink_0, '0']

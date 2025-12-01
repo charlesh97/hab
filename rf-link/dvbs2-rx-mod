@@ -15,6 +15,7 @@ import time
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
+from gnuradio import network
 
 from packaging.version import Version as StrictVersion
 from PyQt5 import Qt, QtCore
@@ -66,6 +67,7 @@ class DVBS2RxTopBlock(gr.top_block, Qt.QWidget):
         self.multistream = options.multistream
         self.out_fd = options.out_fd
         self.out_file = options.out_file
+        self.out_udp = options.out_udp
         self.out_stream = options.out_stream
         self.pilots = options.pilots
         self.pl_acm_vcm = options.pl_acm_vcm
@@ -797,6 +799,19 @@ class DVBS2RxTopBlock(gr.top_block, Qt.QWidget):
             sink = blocks.file_descriptor_sink(gr.sizeof_char, self.out_fd)
         elif (self.sink == "file"):
             sink = blocks.file_sink(gr.sizeof_char, self.out_file)
+        elif (self.sink == "udp"):
+            
+            # Parse IP and port from self.out_udp (format: "IP:PORT")
+            if not isinstance(self.out_udp, str) or not self.out_udp:
+                raise ValueError(f"--out-udp argument is required and must be a non-empty string of the format IP:PORT")
+            if ':' in self.out_udp:
+                udp_ip, udp_port = self.out_udp.split(':', 1)
+                udp_port = int(udp_port)
+            else:
+                raise ValueError(f"Invalid --out-udp value '{self.out_udp}'. Expected format: IP:PORT")
+                
+            sink = network.udp_sink(gr.sizeof_char, 1, udp_ip, udp_port, 0, 1316, False)
+            
         return sink
 
     def _plsync_params(self):
@@ -1455,7 +1470,7 @@ def argument_parser():
 
     snk_group = parser.add_argument_group('Sink Options')
     snk_group.add_argument("--sink",
-                           choices=["fd", "file"],
+                           choices=["fd", "file", "udp"],
                            default="fd",
                            help="Sink for the output MPEG transport stream")
     snk_group.add_argument("--out-fd",
@@ -1465,6 +1480,9 @@ def argument_parser():
     snk_group.add_argument("--out-file",
                            type=str,
                            help="Output file used if sink=file")
+    snk_group.add_argument("--out-udp",
+                           type=str,
+                           help="Output UDP address:port used if sink=udp. Example: 127.0.0.1:2000")
     snk_group.add_argument(
         "--out-stream",
         type=str,

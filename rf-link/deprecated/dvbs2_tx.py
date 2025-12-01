@@ -24,6 +24,7 @@ from PyQt5 import Qt
 from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
+from gnuradio import network
 from gnuradio import soapy
 import sip
 import threading
@@ -170,6 +171,7 @@ class dvbs2_tx(gr.top_block, Qt.QWidget):
 
         self._qtgui_freq_sink_x_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
+        self.network_udp_sink_0 = network.udp_sink(gr.sizeof_gr_complex, 1, '127.0.0.1', 2000, 0, 1316, False)
         self.fft_filter_xxx_0 = filter.fft_filter_ccc(1, firdes.root_raised_cosine(1, samp_rate, samp_rate/2, rolloff, taps), 1)
         self.fft_filter_xxx_0.declare_sample_delay(0)
         self.dtv_dvbs2_physical_cc_0 = dtv.dvbs2_physical_cc(
@@ -226,6 +228,7 @@ class dvbs2_tx(gr.top_block, Qt.QWidget):
         self.connect((self.dtv_dvbs2_interleaver_bb_0, 0), (self.dtv_dvbs2_modulator_bc_0, 0))
         self.connect((self.dtv_dvbs2_modulator_bc_0, 0), (self.dtv_dvbs2_physical_cc_0, 0))
         self.connect((self.dtv_dvbs2_physical_cc_0, 0), (self.fft_filter_xxx_0, 0))
+        self.connect((self.fft_filter_xxx_0, 0), (self.network_udp_sink_0, 0))
         self.connect((self.fft_filter_xxx_0, 0), (self.qtgui_freq_sink_x_0, 0))
         self.connect((self.fft_filter_xxx_0, 0), (self.qtgui_waterfall_sink_x_0, 0))
         self.connect((self.fft_filter_xxx_0, 0), (self.soapy_hackrf_sink_1, 0))

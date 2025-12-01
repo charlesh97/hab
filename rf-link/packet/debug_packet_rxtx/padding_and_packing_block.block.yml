@@ -1,0 +1,23 @@
+id: padding_and_packing_block
+label: Padding and Packing Block
+category: '[Custom]'
+
+inputs:
+-   label: in
+    domain: message
+    dtype: message
+
+outputs:
+-   label: out
+    domain: message
+    dtype: message
+-   label: precrc
+    domain: message
+    dtype: message
+    optional: true
+
+templates:
+    imports: 'from padding_and_packing_block import padding_and_packing_block'
+    make: 'padding_and_packing_block()'
+
+file_format: 1
