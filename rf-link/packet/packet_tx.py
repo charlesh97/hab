@@ -73,7 +73,8 @@ class packet_tx(gr.hier_block2):
         
         # Calculate total post_padding: filt_delay (for filter) + user-specified padding (for HackRF buffer)
         total_post_padding = filt_delay + post_padding
-        self.digital_burst_shaper_xx_0 = digital.burst_shaper_cc(firdes.window(window.WIN_HANN, 20, 0), 0, total_post_padding, True, 'packet_len')
+        pre_padding = 10000
+        self.digital_burst_shaper_xx_0 = digital.burst_shaper_cc(firdes.window(window.WIN_HANN, 20, 0), pre_padding, total_post_padding, True, 'packet_len')
         
         self.blocks_tagged_stream_mux_0 = blocks.tagged_stream_mux(gr.sizeof_gr_complex*1, 'packet_len', 0)
         self.blocks_tagged_stream_multiply_length_0 = blocks.tagged_stream_multiply_length(gr.sizeof_gr_complex*1, 'packet_len', sps)

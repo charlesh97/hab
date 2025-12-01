@@ -83,14 +83,14 @@ class packet_custom_rx(gr.top_block):
             psf_taps=rx_rrc_taps,
             sps=sps,
         )
-        self.freq_xlating_fir_filter_xxx_0 = filter.freq_xlating_fir_filter_ccc(1, [32], 200e3, samp_rate)
+        self.freq_xlating_fir_filter_xxx_0 = filter.freq_xlating_fir_filter_ccc(1, [32], 200e3, self.samp_rate)
         self.blocks_message_debug_0_0_0 = blocks.message_debug(True, gr.log_levels.info)
 
 
         ##################################################
         # Connections
         ##################################################
-        self.msg_connect((self.packet_rx_0, 'pkt out'), (self.blocks_message_debug_0_0_0, 'print_pdu'))
+        self.msg_connect((self.packet_rx_0, 'precrc'), (self.blocks_message_debug_0_0_0, 'print'))
         self.connect((self.freq_xlating_fir_filter_xxx_0, 0), (self.packet_rx_0, 0))
         self.connect((self.soapy_hackrf_source_0, 0), (self.freq_xlating_fir_filter_xxx_0, 0))
 
