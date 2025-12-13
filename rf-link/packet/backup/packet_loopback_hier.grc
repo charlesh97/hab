@@ -9,7 +9,7 @@ options:
     description: ''
     gen_cmake: 'On'
     gen_linking: dynamic
-    generate_options: qt_gui
+    generate_options: no_gui
     hier_block_src_path: '.:'
     id: packet_loopback_hier
     max_nouts: '0'
@@ -412,7 +412,7 @@ blocks:
     coordinate: [944, 11]
     rotation: 0
     state: enabled
-- name: blocks_message_debug_0_0_0_0_0
+- name: blocks_message_debug_0
   id: blocks_message_debug
   parameters:
     affinity: ''
@@ -424,7 +424,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1800, 84.0]
+    coordinate: [1776, 28.0]
     rotation: 0
     state: enabled
 - name: blocks_message_strobe_0
@@ -441,7 +441,28 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [32, 196.0]
+    coordinate: [120, 200.0]
+    rotation: 0
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: 2e6
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [960, 152.0]
     rotation: 0
     state: enabled
 - name: packet_rx_0
@@ -464,7 +485,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1512, 84.0]
+    coordinate: [1504, 60.0]
     rotation: 0
     state: enabled
 - name: packet_tx_0
@@ -498,21 +519,22 @@ blocks:
     length_modulo: '2'
     mask: '0xFF'
     maxoutbuf: '0'
-    maxsize: '22'
+    maxsize: '40'
     minoutbuf: '0'
-    minsize: '20'
+    minsize: '30'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [224, 180.0]
+    coordinate: [312, 192.0]
     rotation: 0
     state: enabled
 
 connections:
 - [blocks_message_strobe_0, strobe, pdu_random_pdu_0, generate]
-- [packet_rx_0, precrc, blocks_message_debug_0_0_0_0_0, print]
-- [packet_tx_0, '0', packet_rx_0, '0']
+- [blocks_throttle2_0, '0', packet_rx_0, '0']
+- [packet_rx_0, pkt out, blocks_message_debug_0, print]
+- [packet_tx_0, '0', blocks_throttle2_0, '0']
 - [pdu_random_pdu_0, pdus, packet_tx_0, in]
 
 metadata:

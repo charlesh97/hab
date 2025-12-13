@@ -17,7 +17,6 @@ import sys
 import signal
 from gnuradio import gr, pdu
 from gnuradio.filter import pfb
-import pmt
 import threading
 
 
@@ -79,64 +78,16 @@ class packet_tx(gr.hier_block2):
         self.blocks_tagged_stream_multiply_length_0 = blocks.tagged_stream_multiply_length(gr.sizeof_gr_complex*1, 'packet_len', sps)
         self.blocks_repack_bits_bb_0_0 = blocks.repack_bits_bb(8, pld_const.bits_per_symbol(), 'packet_len', False, gr.GR_MSB_FIRST)
         self.blocks_repack_bits_bb_0 = blocks.repack_bits_bb(8, hdr_const.bits_per_symbol(), 'packet_len', False, gr.GR_MSB_FIRST)
-        
-        # Debug blocks (disabled for cleaner output)
-        # self.blocks_message_debug_postcrc = blocks.message_debug(True, gr.log_levels.info)
-        # self.blocks_message_debug_fec_encoder_out = blocks.message_debug(True, gr.log_levels.info)
-        
-        # Custom block to debug what length gets encoded in header
-        class FECEncoderOutDebug(gr.basic_block):
-            def __init__(self, pld_const, pld_enc):
-                gr.basic_block.__init__(self,
-                    name="FECEncoderOutDebug",
-                    in_sig=None,
-                    out_sig=None)
-                self.pld_const = pld_const
-                self.pld_enc = pld_enc
-                self.message_port_register_in(pmt.intern("in"))
-                self.message_port_register_out(pmt.intern("out"))
-                self.set_msg_handler(pmt.intern("in"), self.handle_msg)
-            
-            def handle_msg(self, msg):
-                # Check if it's a PDU (pair with dict and vector)
-                if pmt.is_pair(msg):
-                    pdu_meta = pmt.car(msg)
-                    pdu_data = pmt.cdr(msg)
-                    if pmt.is_u8vector(pdu_data):
-                        vec = pmt.u8vector_elements(pdu_data)
-                        # Debug output disabled for cleaner logs
-                        # length_bytes = len(vec)
-                        # length_bits = length_bytes * 8
-                        # ...
-                elif pmt.is_u8vector(msg):
-                    # Debug output disabled
-                    pass
-                else:
-                    # Debug output disabled
-                    pass
-                self.message_port_pub(pmt.intern("out"), msg)
-        
-        self.blocks_fec_encoder_out_debug = FECEncoderOutDebug(pld_const, pld_enc)
 
 
         ##################################################
         # Connections
         ##################################################
-        # NOTE: For terminated CC with k=7, rate 1/2:
-        # Input: 192 bits (24 bytes) → +6 termination → 198 bits → encode → 396 bits = 49.5 bytes
-        # FEC async encoder truncates to 49 bytes = 392 bits (loses 4 bits)
-        # This results in header encoding 196 symbols instead of 198
-        # The RX side should expect 196 symbols and decode to 190 bits instead of 192
         self.msg_connect((self.digital_crc32_async_bb_1, 'out'), (self.fec_async_encoder_0, 'in'))
         self.msg_connect((self.digital_crc32_async_bb_1, 'out'), (self, 'postcrc'))
-        # Disabled for cleaner output
-        # self.msg_connect((self.digital_crc32_async_bb_1, 'out'), (self.blocks_message_debug_postcrc, 'print'))
         self.msg_connect((self.digital_protocol_formatter_async_0, 'header'), (self.fec_async_encoder_0_0, 'in'))
         self.msg_connect((self.digital_protocol_formatter_async_0, 'payload'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
-        self.msg_connect((self.fec_async_encoder_0, 'out'), (self.blocks_fec_encoder_out_debug, 'in'))
-        self.msg_connect((self.blocks_fec_encoder_out_debug, 'out'), (self.digital_protocol_formatter_async_0, 'in'))
-        # Disabled for cleaner output
-        # self.msg_connect((self.fec_async_encoder_0, 'out'), (self.blocks_message_debug_fec_encoder_out, 'print'))
+        self.msg_connect((self.fec_async_encoder_0, 'out'), (self.digital_protocol_formatter_async_0, 'in'))
         self.msg_connect((self.fec_async_encoder_0_0, 'out'), (self.pdu_pdu_to_tagged_stream_0_0, 'pdus'))
         self.msg_connect((self, 'in'), (self.digital_crc32_async_bb_1, 'in'))
         self.connect((self.blocks_repack_bits_bb_0, 0), (self.digital_map_bb_1, 0))

@@ -103,10 +103,12 @@ The reception chain performs the reverse operations:
    - **Output: 190 bits (unpacked)** ← **PROBLEM: Should be 192 bits!**
    - Format: Unpacked bits (each byte represents one bit, value 0 or 1)
 
-9. **Bit Padding & Packing** (`PaddingAndPackingBlock` - custom block)
+9. **Bit Padding, Packing & CRC Validation** (`PaddingPackingCrcBlock` - custom block)
    - **Input: 190 bits (unpacked)**
-   - Pads with 2 zero bits
-   - **Output: 192 bits (packed into 24 bytes)**
+   - Tries all 4 possible padding patterns (00, 01, 10, 11) for the 2 missing bits
+   - Computes CRC for each pattern and selects the one that passes
+   - Prints failure message if all patterns fail
+   - **Output: 192 bits (packed into 24 bytes) with valid CRC**
 
 10. **CRC-32 Check** (`digital.crc32_async_bb`)
     - Verifies CRC checksum
@@ -250,33 +252,45 @@ The issue stems from **byte-alignment requirements** in the FEC async encoder/de
 
 ---
 
-## Workaround 1: Bit Padding on RX Side
+## Workaround 1: Bit Padding, Packing, and CRC Validation on RX Side
 
 ### Implementation Details
 
-This workaround adds a custom block (`PaddingAndPackingBlock`) that:
+This workaround adds a custom block (`PaddingPackingCrcBlock`) that:
 
 1. **Receives unpacked bits from FEC decoder** (190 bits)
-2. **Pads with 2 zero bits** to reach 192 bits
-3. **Packs bits into bytes** (192 bits → 24 bytes)
-4. **Passes to CRC checker**
+2. **Tries all possible padding patterns** (2^padding_needed combinations, typically 4 patterns for 2 missing bits)
+3. **For each pattern**:
+   - Pads the unpacked bits with the pattern
+   - Packs bits into bytes (192 bits → 24 bytes)
+   - Computes CRC on the data portion (first 20 bytes)
+   - Compares with received CRC (last 4 bytes)
+4. **Selects the pattern that makes CRC pass**
+5. **Outputs the validated data**, or prints a failure message if all patterns fail
 
 ### Why This Works
 
 - The missing 2 bits are **termination bits** that were lost during truncation
-- These bits are typically zeros or don't affect the actual data
-- Padding with zeros restores the byte count needed for CRC verification
-- The CRC check passes because the data portion (first 20 bytes) is correct
+- By trying all 4 possible bit patterns (00, 01, 10, 11), we find the correct pattern
+- The CRC validation ensures we select the pattern that matches the original data
+- This is more robust than assuming zeros, as it validates the result
 
 ### Code Location
 
-Located in `packet/packet_rx.py`, lines 121-172.
-Also located in 'padding_and_packing_block.py
+Located in `debug_packet_rxtx/packet_rx.py`.
+Also located in `debug_packet_rxtx/padding_packing_crc_block.py`.
+
+### Features
+
+- **CRC validation**: Computes CRC for each padding pattern and selects the valid one
+- **Failure reporting**: Prints detailed error messages if all CRC options fail
+- **Pre-CRC output**: Provides a `precrc` port for debugging data before CRC validation
+- **Robust**: Works even when the missing bits are not zeros
 
 ### Limitations
 
-- Assumes the missing bits should be zeros (may not always be true)
-- Doesn't fix the root cause (byte alignment issue)
+- Adds computational overhead (tries multiple patterns, though only 4 for 2 bits)
+- Doesn't fix the root cause (byte alignment issue in FEC encoder)
 - Adds latency and complexity
 
 ---
@@ -354,30 +368,38 @@ To implement the padding workaround in a separate GRC file:
 
 1. In GNU Radio Companion (GRC), add a **Python Embedded Block**
 2. Set the following properties:
-   - **ID**: `padding_and_packing_block`
+   - **ID**: `padding_packing_crc_block`
    - **Parameters**: `expected_bits=192`
    - **Code**: (see below)
 
 #### Step 2: Python Code for Embedded Block
 
+**Note**: The full implementation with CRC validation is available in `debug_packet_rxtx/padding_packing_crc_block.py`. The example below shows a simplified version. For production use, import the full block:
+
+```python
+from padding_packing_crc_block import padding_packing_crc_block
+```
+
+Simplified example code:
+
 ```python
 import numpy
 from gnuradio import gr
 import pmt
+import zlib
 
-class padding_and_packing_block(gr.basic_block):
+class padding_packing_crc_block(gr.basic_block):
     """
-    Pads unpacked bits and converts to packed bytes.
+    Pads unpacked bits, converts to packed bytes, and validates CRC.
     
     Input: Unpacked bits (u8vector, each byte = 1 bit, value 0 or 1)
-    Output: Packed bytes (u8vector, 8 bits per byte)
+    Output: Packed bytes (u8vector, 8 bits per byte) with valid CRC
     """
-    def __init__(self, expected_bits=192):
+    def __init__(self):
         gr.basic_block.__init__(self,
-            name="padding_and_packing_block",
+            name="padding_packing_crc_block",
             in_sig=None,
             out_sig=None)
-        self.expected_bits = expected_bits
         self.message_port_register_in(pmt.intern("in"))
         self.message_port_register_out(pmt.intern("out"))
         self.message_port_register_out(pmt.intern("precrc"))  # Optional: for debugging
@@ -406,16 +428,21 @@ class padding_and_packing_block(gr.basic_block):
                 vec = list(pmt.u8vector_elements(data))
                 current_bits = len(vec)
                 
-                # Pad if necessary
-                if current_bits < self.expected_bits:
-                    # Pad with zero bits (each zero is a byte with value 0)
-                    padding_needed = self.expected_bits - current_bits
-                    vec.extend([0x00] * padding_needed)
-                    print(f"[Padding Block] Padded {padding_needed} bits (from {current_bits} to {self.expected_bits} bits)")
-                elif current_bits > self.expected_bits:
-                    # Truncate if too many (shouldn't happen, but handle gracefully)
-                    vec = vec[:self.expected_bits]
-                    print(f"[Padding Block] WARNING: Truncated {current_bits - self.expected_bits} bits")
+                # Calculate padding needed
+                bits_mod_8 = current_bits % 8
+                if bits_mod_8 != 0:
+                    padding_needed = 8 - bits_mod_8
+                    # Try all possible padding patterns and find the one that makes CRC pass
+                    best_packed = None
+                    for pad_pattern in range(2 ** padding_needed):
+                        test_vec = vec.copy()
+                        for bit_pos in range(padding_needed):
+                            bit_val = (pad_pattern >> bit_pos) & 0x01
+                            test_vec.append(bit_val)
+                        # Pack and validate CRC (see full implementation for details)
+                        # ... CRC validation code ...
+                    if best_packed is None:
+                        print(f"[PaddingPackingCrc] ERROR: CRC validation failed for all {2 ** padding_needed} patterns")
                 
                 # Pack unpacked bits to bytes (8 bits per byte, MSB first)
                 # Each element in vec is 0 or 1 (representing one bit)
@@ -453,8 +480,9 @@ class padding_and_packing_block(gr.basic_block):
 
 3. **Connections:**
    ```
-   fec.async_decoder 'out' → padding_and_packing_block 'in'
-   padding_and_packing_block 'out' → digital.crc32_async_bb 'in'
+   fec.async_decoder 'out' → padding_packing_crc_block 'in'
+   padding_packing_crc_block 'out' → digital.crc32_async_bb 'in'
+   padding_packing_crc_block 'precrc' → (optional debug output)
    ```
 
 #### Step 4: Usage Notes
@@ -467,11 +495,12 @@ class padding_and_packing_block(gr.basic_block):
 2. **Output Format:**
    - PDU with u8vector
    - Packed bytes (8 bits per byte)
-   - Ready for CRC checking
+   - CRC-validated (only outputs if CRC check passes)
 
 3. **Debugging:**
-   - Connect `precrc` port to a `message_debug` block to see data before padding
-   - The block prints padding information when it modifies the data
+   - Connect `precrc` port to a `message_debug` block to see data before CRC validation
+   - The block prints failure messages if all CRC patterns fail
+   - Failure messages include packet sequence number and padding pattern details
 
 ### Alternative: Using Blocks Already in GRC
 
@@ -500,7 +529,7 @@ If you prefer not to use Python Embedded Blocks, you can:
 - Missing 2 bits cause CRC failures
 
 ### Workaround 1: Bit Padding (Current Implementation)
-- **Location**: `packet/packet_rx.py`, `PaddingAndPackingBlock` class
+- **Location**: `debug_packet_rxtx/packet_rx.py`, `padding_packing_crc_block` class
 - **Method**: Pad 190 bits to 192 bits, then pack to bytes
 - **Pros**: Works with k=7 (better error correction)
 - **Cons**: Assumes missing bits are zeros, adds complexity

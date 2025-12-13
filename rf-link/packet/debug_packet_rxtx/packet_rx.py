@@ -18,11 +18,48 @@ import signal
 from gnuradio import gr, pdu
 import pmt
 import threading
+from padding_packing_crc_block import padding_packing_crc_block
 
 
-
-
-
+# Debug block to print PDU bytes
+class PduDebugBlock(gr.basic_block):
+    def __init__(self, label):
+        gr.basic_block.__init__(self, name=f"PDU Debug ({label})", in_sig=None, out_sig=None)
+        self._label = label
+        self.message_port_register_in(pmt.intern("in"))
+        self.message_port_register_out(pmt.intern("out"))
+        self.set_msg_handler(pmt.intern("in"), self.handle_msg)
+    
+    def handle_msg(self, msg):
+        try:
+            if pmt.is_pair(msg):
+                meta = pmt.car(msg)
+                data = pmt.cdr(msg)
+                if pmt.is_u8vector(data):
+                    vec = list(pmt.u8vector_elements(data))
+                    hex_bytes = " ".join(f"{b:02x}" for b in vec)
+                    # Check if this looks like unpacked bits (values are only 0 or 1)
+                    unique_vals = set(vec)
+                    is_unpacked = len(unique_vals) <= 2 and unique_vals.issubset({0, 1})
+                    data_type = "unpacked_bits" if is_unpacked else "packed_bytes"
+                    print(f"[RX DEBUG {self._label}] len={len(vec)} type={data_type} bytes={hex_bytes}", flush=True)
+                elif pmt.is_f32vector(data):
+                    vec = list(pmt.f32vector_elements(data))
+                    print(f"[RX DEBUG {self._label}] len={len(vec)} type=float32 (soft_symbols)", flush=True)
+                elif pmt.is_blob(data):
+                    vec = list(pmt.blob_data(data))
+                    hex_bytes = " ".join(f"{b:02x}" for b in vec)
+                    print(f"[RX DEBUG {self._label}] len={len(vec)} type=blob bytes={hex_bytes}", flush=True)
+                else:
+                    print(f"[RX DEBUG {self._label}] type={type(data)} pmt_type={pmt.pmt_symbol_name(pmt.pmt_typeof(data))}", flush=True)
+            else:
+                print(f"[RX DEBUG {self._label}] non-pair message type={type(msg)}", flush=True)
+        except Exception as e:
+            print(f"[RX DEBUG {self._label}] ERROR: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+        # Forward message
+        self.message_port_pub(pmt.intern("out"), msg)
 
 
 class packet_rx(gr.hier_block2):
@@ -81,116 +118,33 @@ class packet_rx(gr.hier_block2):
             1,
             [],
             0)
-        self.digital_crc32_async_bb_0 = digital.crc32_async_bb(True)
+        #self.digital_crc32_async_bb_0 = digital.crc32_async_bb(True)
         self.digital_costas_loop_cc_0_0_0 = digital.costas_loop_cc((6.28/200.0), pld_const.arity(), False)
         self.digital_costas_loop_cc_0_0 = digital.costas_loop_cc((6.28/200.0), hdr_const.arity(), False)
-        self.digital_corr_est_cc_0 = digital.corr_est_cc(modulated_sync_word, sps, mark_delay, 0.9, digital.THRESHOLD_ABSOLUTE)
+        self.digital_corr_est_cc_0 = digital.corr_est_cc(modulated_sync_word, sps, mark_delay, 0.999, digital.THRESHOLD_ABSOLUTE)
         self.digital_constellation_soft_decoder_cf_0_0 = digital.constellation_soft_decoder_cf(hdr_const, -1)
         self.digital_constellation_soft_decoder_cf_0 = digital.constellation_soft_decoder_cf(pld_const, -1)
         self.blocks_tagged_stream_multiply_length_0 = blocks.tagged_stream_multiply_length(gr.sizeof_float*1, "payload symbols", pld_const.bits_per_symbol())
         self.blocks_multiply_by_tag_value_cc_0 = blocks.multiply_by_tag_value_cc("amp_est", 1)
-        
-        # Debug blocks (disabled for cleaner output)
-        # self.blocks_message_debug_header_info = blocks.message_debug(True, gr.log_levels.info)
-        # self.blocks_message_debug_pdu_to_fec = blocks.message_debug(True, gr.log_levels.info)
-        
-        # Custom message handler block for detailed header info
-        class HeaderInfoDebug(gr.basic_block):
-            def __init__(self, pld_const):
-                gr.basic_block.__init__(self,
-                    name="HeaderInfoDebug",
-                    in_sig=None,
-                    out_sig=None)
-                self.pld_const = pld_const
-                self.message_port_register_in(pmt.intern("in"))
-                self.message_port_register_out(pmt.intern("out"))
-                self.set_msg_handler(pmt.intern("in"), self.handle_msg)
-            
-            def handle_msg(self, msg):
-                # Verbose header info disabled for cleaner output
-                # if pmt.is_dict(msg):
-                #     print("\n[DEBUG RX] Header Info Dictionary:")
-                #     ...
-                self.message_port_pub(pmt.intern("out"), msg)
-        
-        self.blocks_header_info_debug = HeaderInfoDebug(pld_const)
-        
-        # Padding and packing block to restore missing bits before CRC check
-        # FEC decoder outputs unpacked bits that may not be byte-aligned due to truncation
-        # We pad to next byte boundary (modulo 8 = 0), then pack to bytes for CRC32
-        class PaddingAndPackingBlock(gr.basic_block):
-            def __init__(self):
-                gr.basic_block.__init__(self,
-                    name="PaddingAndPackingBlock",
-                    in_sig=None,
-                    out_sig=None)
-                self.message_port_register_in(pmt.intern("in"))
-                self.message_port_register_out(pmt.intern("out"))
-                self.message_port_register_out(pmt.intern("precrc"))  # Output port for debugging
-                self.set_msg_handler(pmt.intern("in"), self.handle_msg)
-            
-            def handle_msg(self, msg):
-                # Forward original message to precrc port for debugging (before padding)
-                self.message_port_pub(pmt.intern("precrc"), msg)
-                
-                if pmt.is_pair(msg):
-                    meta = pmt.car(msg)
-                    data = pmt.cdr(msg)
 
-                    if pmt.is_u8vector(data):
-                        vec = list(pmt.u8vector_elements(data))
-                        # FEC decoder outputs unpacked bits (each byte = 1 bit, value 0 or 1)
-                        current_bits = len(vec)
-                        
-                        # Pad to next byte boundary (make current_bits divisible by 8)
-                        # For terminated convolutional codes, missing bits are termination bits (zeros)
-                        bits_mod_8 = current_bits % 8
-                        if bits_mod_8 != 0:
-                            padding_needed = 8 - bits_mod_8
-                            vec.extend([0x00] * padding_needed)
-                        
-                        # If packing more than 2 bits, please make warning message
-                        if padding_needed > 2:
-                            print(f"[Padding Block] WARNING: Packing {padding_needed} bits more than 2 bits")
-
-                        # Pack unpacked bits to bytes (8 bits per byte, MSB first)
-                        # Convert each bit (0 or 1) to actual bit values
-                        packed_bytes = []
-                        for i in range(0, len(vec), 8):
-                            byte_val = 0
-                            for j in range(8):
-                                if i + j < len(vec):
-                                    # Convert 0/1 byte to bit
-                                    bit_val = vec[i + j] & 0x01  # Ensure it's 0 or 1
-                                    byte_val |= (bit_val << (7 - j))  # MSB first
-                            packed_bytes.append(byte_val)
-                        
-                        packed = pmt.init_u8vector(len(packed_bytes), packed_bytes)
-                        self.message_port_pub(pmt.intern("out"), pmt.cons(meta, packed))
-                    else:
-                        #throw error message
-                        raise ValueError(f"[Padding Block] ERROR: Not a u8vector: {data}")
-                else:
-                    #throw error message
-                    raise ValueError(f"[Padding Block] ERROR: Not a PDU pair: {msg}")
+        self.blocks_padding_crc = padding_packing_crc_block()   # Padding, packing, and CRC block to restore missing bits and validate CRC
         
-        self.blocks_padding = PaddingAndPackingBlock()
-
-
         ##################################################
         # Connections
         ##################################################
-        self.msg_connect((self.digital_crc32_async_bb_0, 'out'), (self, 'pkt out'))
-        self.msg_connect((self.digital_protocol_parser_b_0, 'info'), (self.blocks_header_info_debug, 'in'))
-        self.msg_connect((self.blocks_header_info_debug, 'out'), (self.digital_header_payload_demux_0, 'header_data'))
-        # Disabled for cleaner output
-        # self.msg_connect((self.blocks_header_info_debug, 'out'), (self.blocks_message_debug_header_info, 'print'))
-        self.msg_connect((self.fec_async_decoder_0, 'out'), (self.blocks_padding, 'in'))
-        self.msg_connect((self.blocks_padding, 'out'), (self.digital_crc32_async_bb_0, 'in'))
-        self.msg_connect((self.blocks_padding, 'precrc'), (self, 'precrc'))  # Debug output before padding
         self.msg_connect((self.pdu_tagged_stream_to_pdu_0, 'pdus'), (self.fec_async_decoder_0, 'in'))
-        # Disabled for cleaner output
-        # self.msg_connect((self.pdu_tagged_stream_to_pdu_0, 'pdus'), (self.blocks_message_debug_pdu_to_fec, 'print'))
+        
+        # Send to padding block
+        self.msg_connect((self.fec_async_decoder_0, 'out'), (self.blocks_padding_crc, 'in'))
+        
+        # Send to precrc port and to CRC check block
+        self.msg_connect((self.blocks_padding_crc, 'precrc'), (self, 'precrc'))
+        self.msg_connect((self.blocks_padding_crc, 'out'), (self, 'pkt out'))
+        
+        # Don't need CRC check block because padding block validates CRC
+        #self.msg_connect((self.digital_crc32_async_bb_0, 'out'), (self, 'pkt out'))
+        
+        self.msg_connect((self.digital_protocol_parser_b_0, 'info'), (self.digital_header_payload_demux_0, 'header_data'))
         self.connect((self.blocks_multiply_by_tag_value_cc_0, 0), (self.digital_pfb_clock_sync_xxx_0, 0))
         self.connect((self.blocks_tagged_stream_multiply_length_0, 0), (self.pdu_tagged_stream_to_pdu_0, 0))
         self.connect((self.digital_constellation_soft_decoder_cf_0, 0), (self.blocks_tagged_stream_multiply_length_0, 0))
@@ -284,7 +238,7 @@ class packet_rx(gr.hier_block2):
 
     def set_preamble_select(self, preamble_select):
         self.preamble_select = preamble_select
-        self.set_preamble(self.preamble_select[int(1.0/hdr_dec.rate())])
+        self.set_preamble(self.preamble_select[int(1.0/self.hdr_dec.rate())])
 
     def get_rxmod(self):
         return self.rxmod

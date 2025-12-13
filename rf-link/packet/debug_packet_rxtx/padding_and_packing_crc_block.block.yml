@@ -1,5 +1,5 @@
-id: padding_and_packing_block
-label: Padding and Packing Block
+id: padding_and_packing_crc_block
+label: Padding and Packing and CRC Block
 category: '[Custom]'
 
 inputs:
@@ -17,7 +17,7 @@ outputs:
     optional: true
 
 templates:
-    imports: 'from padding_and_packing_block import padding_and_packing_block'
-    make: 'padding_and_packing_block()'
+    imports: 'from padding_packing_crc_block import padding_packing_crc_block'
+    make: 'padding_packing_crc_block()'
 
 file_format: 1

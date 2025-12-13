@@ -131,6 +131,7 @@ class packet_rx(gr.hier_block2):
             
             def handle_msg(self, msg):
                 # Forward original message to precrc port for debugging (before padding)
+                
                 self.message_port_pub(pmt.intern("precrc"), msg)
                 
                 if pmt.is_pair(msg):
