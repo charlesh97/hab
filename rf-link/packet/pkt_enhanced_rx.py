@@ -10,13 +10,18 @@ Architecture (built on the proven 121/121 sync-word technique):
   5. Extract FEC payload symbols → hard-decision bits → packet_decode()
   6. CRC validates → print decoded message
 
+Variable-length payloads are handled by embedding a 1-byte length field
+inside the FEC-protected data. The receiver always extracts enough FEC
+symbols for the maximum payload size; packet_decode() reads the length
+byte after FEC decoding and validates via CRC-32.
+
 No more brute-force bit shifting or heuristic text matching.
 """
 import numpy as np
 import SoapySDR
 import sys, time, argparse
 from gnuradio.filter import firdes
-from packet_codec import packet_decode
+from packet_codec import packet_decode, max_encoded_size_for_payload
 
 SPS = 20; FS = 2000000
 
@@ -32,6 +37,11 @@ SYNC_WORD = 0xACDDA4E2
 _SYNC_BI = np.array([(SYNC_WORD >> (31 - i)) & 1 for i in range(SYNC_BITS)],
                     dtype=np.float64)
 SYNC_BPSK = 2.0 * _SYNC_BI - 1.0
+
+# Maximum FEC-encoded bytes the receiver will extract after the sync word.
+# This is a fixed budget large enough for any payload up to 256 bytes.
+MAX_FEC_BYTES = max_encoded_size_for_payload(512)      # 1038
+MAX_FEC_SYMS = MAX_FEC_BYTES * 8                       # 8304 BPSK symbols (bits)
 
 
 def rcc_taps(sps=SPS, alpha=0.35, ntaps=11):
@@ -75,14 +85,16 @@ def scan_frequency(samples, search_width=10000, step=100):
     return centroid
 
 
-def decode_payload_symbols(payload_syms, fec_bytes):
+def decode_payload_symbols(payload_syms):
     """
     Convert BPSK symbols to bytes via hard decisions, then packet_decode().
     Tries both normal and inverted polarity (180° phase ambiguity).
 
+    The full set of extracted symbols is passed to packet_decode(),
+    which handles the embedded length byte and CRC validation.
+
     Args:
         payload_syms: BPSK symbols (float, >0 = bit 0, <0 = bit 1)
-        fec_bytes: Expected number of FEC bytes
 
     Returns:
         (decoded_message, polarity) or (None, None)
@@ -98,15 +110,14 @@ def decode_payload_symbols(payload_syms, fec_bytes):
                 if i + j < len(bits_hard):
                     b |= int(bits_hard[i + j]) << (7 - j)
             fec_data.append(b)
-        # Must be exactly fec_bytes
-        fec_data = bytes(fec_data[:fec_bytes])
-        result = packet_decode(fec_data)
+        # Pass all bytes — packet_decode handles length extraction
+        result = packet_decode(bytes(fec_data))
         if result is not None:
             return result, label
     return None, None
 
 
-def process_phase(filtered, phase, fo, fec_syms,
+def process_phase(filtered, phase, fo,
                    pre_bits=PREAMBLE_BITS,
                    top_n=5):
     """Process one SPS decimation phase, returning decoded packets.
@@ -116,16 +127,23 @@ def process_phase(filtered, phase, fo, fec_syms,
     top `top_n` correlation peaks and try to decode each one.
     CRC validation on the decoded data filters out false alarms.
     
+    Always extracts MAX_FEC_SYMS symbols after the sync word. The
+    embedded length byte in the FEC-protected data tells packet_decode()
+    how many bytes are real; extra symbols produce garbage that CRC
+    catches.
+
     Args:
         filtered: RRC-filtered baseband signal
         phase: Decimation phase (0..SPS-1)
         fo: Carrier frequency offset estimate (Hz)
-        fec_syms: Number of FEC symbols after sync word
         pre_bits: Number of preamble symbols before sync word
         top_n: Number of correlation peaks to try
     """
     symbols = filtered[phase::SPS]
-    min_len = pre_bits + SYNC_BITS + fec_syms
+    # We need at least preamble+sync+stream_id_syms.  The actual FEC
+    # payload may be shorter than MAX_FEC_SYMS for small messages;
+    # packet_decode() handles undersized extraction via CRC.
+    min_len = pre_bits + SYNC_BITS + 1
     if len(symbols) < min_len:
         return []
 
@@ -143,7 +161,7 @@ def process_phase(filtered, phase, fo, fec_syms,
             continue
 
         payload_start = i + SYNC_BITS
-        if payload_start + fec_syms > len(symbols):
+        if payload_start >= len(symbols):
             continue
         candidates.append((corr[i], i))
 
@@ -151,9 +169,10 @@ def process_phase(filtered, phase, fo, fec_syms,
     candidates.sort(key=lambda x: -x[0])
     for corr_val, idx in candidates[:top_n]:
         payload_start = idx + SYNC_BITS
-        payload = symbols[payload_start:payload_start + fec_syms]
-        fec_bytes = (fec_syms + 7) // 8
-        msg, polarity = decode_payload_symbols(payload, fec_bytes)
+        # Extract available symbols up to MAX_FEC_SYMS
+        n_syms = min(MAX_FEC_SYMS, len(symbols) - payload_start)
+        payload = symbols[payload_start:payload_start + n_syms]
+        msg, polarity = decode_payload_symbols(payload)
         if msg is not None:
             results.append({
                 'message': msg,
@@ -167,11 +186,10 @@ def process_phase(filtered, phase, fo, fec_syms,
 
 
 class LiveReceiver:
-    def __init__(self, freq=915e6, fec_syms=272, lna=8, vga=12,
+    def __init__(self, freq=915e6, lna=8, vga=12,
                  amp=False, serial=None, duration=30):
         self.fs = int(FS)
         self.freq = freq
-        self.fec_syms = fec_syms
         self.lna, self.vga, self.amp = lna, vga, amp
         self.serial = serial
         self.duration = duration
@@ -228,7 +246,7 @@ class LiveReceiver:
         all_results = []
         for phase in range(SPS):
             all_results.extend(
-                process_phase(filtered, phase, fo, self.fec_syms))
+                process_phase(filtered, phase, fo))
 
         # Deduplicate identical messages from multiple phases
         seen = set()
@@ -247,8 +265,6 @@ class LiveReceiver:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Enhanced Packet RX')
     parser.add_argument('--freq', type=float, default=915e6)
-    parser.add_argument('--fec-syms', type=int, default=272,
-                        help='Number of FEC symbols after sync word')
     parser.add_argument('--lna', type=float, default=8)
     parser.add_argument('--vga', type=float, default=12)
     parser.add_argument('--amp', action='store_true', default=False)
@@ -273,7 +289,7 @@ if __name__ == '__main__':
 
         seen = set()
         for phase in range(SPS):
-            results = process_phase(filtered, phase, fo, args.fec_syms)
+            results = process_phase(filtered, phase, fo)
             for r in results:
                 msg = r['message']
                 if msg not in seen:
@@ -283,7 +299,7 @@ if __name__ == '__main__':
                           f"phase={r['phase']} ({r['polarity']}) "
                           f"| {text!r}")
     else:
-        rx = LiveReceiver(freq=args.freq, fec_syms=args.fec_syms,
+        rx = LiveReceiver(freq=args.freq,
                           lna=args.lna, vga=args.vga,
                           amp=args.amp, serial=args.serial,
                           duration=args.duration)
