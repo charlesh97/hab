@@ -16,19 +16,26 @@ transmitted and decoded `"HELLO WORLD\n"` over an SMA cable between two HackRF O
 | `telemetry_tx.py` | Original HackRF TX test script (full packet chain) |
 | `telemetry_rx.py` | Original HackRF RX test script (full packet chain) |
 
-## Packet Structure (Current Implementation)
+## Packet Structure (Enhanced — CRC+FEC Protected)
 
 ```
-[ 256-bit alternating preamble ] [ 32-bit sync word: 0xE38FC0FC ] [ 96-bit payload ]
+[ preamble: 24 bytes ] [ sync word: 32 bits ] [ FEC payload: variable ]
 ```
 
-- **Preamble**: `101010...` × 128 — 256 bits of alternating 1,0 for clock recovery
-- **Sync word**: `0xE38FC0FC` — 32-bit known pattern (GNU Radio default access code)
-- **Payload**: 12 bytes / 96 bits — `b"HELLO WORLD\n"`
+- **Preamble**: `0xE38FC0FC7FC7E381C0FF8038FFF038E00FC0038000FFFFC0` (24 bytes, from `packet_rx.py`)
+- **Sync word**: `0xACDDA4E2` (GNU Radio default access code, different from preamble — unambiguous correlation)
+- **Payload**: CRC-32 + FEC (convolutional code k=7, rate=1/2) protected variable-length data
 - **Modulation**: BPSK, RRC-shaped (α=0.35), 20 samples/symbol
 - **Sample rate**: 2 Msps
 - **Symbol rate**: 100 kbaud
-- **Packet duration**: 384 symbols × 20 samples = 7,680 samples ≈ 3.84 ms
+- **Packet duration (12B payload)**: 496 symbols × 20 = 9,920 samples ≈ 4.96 ms
+
+### Original (Legacy) Implementation
+
+The original working TX/RX (`pkt_hello_tx.py` / `pkt_rx_final.py`) uses a simpler structure:
+```
+[ 256-bit alternating preamble ] [ 32-bit sync word: 0xE38FC0FC ] [ raw 96-bit payload ]
+```
 
 ## How to Run
 
