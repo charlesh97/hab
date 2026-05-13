@@ -36,7 +36,7 @@ SYNC_WORD = 0xACDDA4E2
 # Precomputed sync word as BPSK symbols (0→+1, 1→-1)
 _SYNC_BI = np.array([(SYNC_WORD >> (31 - i)) & 1 for i in range(SYNC_BITS)],
                     dtype=np.float64)
-SYNC_BPSK = 2.0 * _SYNC_BI - 1.0
+SYNC_BPSK = -2.0 * _SYNC_BI + 1.0  # bit 0→+1, 1→-1 (matches TX mapping)
 
 # Maximum FEC-encoded bytes the receiver will extract after the sync word.
 # This is a fixed budget large enough for any payload up to 256 bytes.

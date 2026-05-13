@@ -12,10 +12,12 @@ Sync word: 0xE38FC0FC (first 4 bytes of preamble — same as original working TX
 Combined preamble+sync gives SHARP correlation with no false peaks.
 """
 import numpy as np
+from gnuradio import gr, blocks, soapy
+from gnuradio.filter import firdes
 import argparse, time
 from packet_codec import packet_encode, encode_size_for_payload
 
-SPS = 20
+SPS = 4
 FS = 2_000_000
 RRC_ALPHA = 0.35
 
@@ -48,14 +50,13 @@ def make_sync_bits():
 
 def bpsk_modulate(bits, sps=SPS, alpha=RRC_ALPHA):
     """Convert bits (list of 0/1) to RRC-shaped BPSK complex waveform."""
-    from gnuradio.filter import firdes
     mapped = np.array(bits, dtype=np.float64) * -2.0 + 1.0
     up = np.zeros(len(mapped) * sps, dtype=np.float64)
     up[::sps] = mapped
     taps = np.array(firdes.root_raised_cosine(sps, sps, 1.0, alpha, 11 * sps))
     waveform = np.convolve(up, taps, 'same')
     peak = np.max(np.abs(waveform))
-    if peak > 0.7:
+    if peak > 0.01:
         waveform *= 0.7 / peak
     return waveform.astype(np.complex64).tolist()
 
@@ -94,7 +95,6 @@ def make_test_burst(payload, n_packets=20, gap_ms=50):
 
 
 def main():
-    from gnuradio import gr, blocks, soapy
     parser = argparse.ArgumentParser(description='Enhanced Packet TX (CRC+FEC)')
     parser.add_argument('--freq', type=float, default=915e6)
     parser.add_argument('--samp', type=float, default=2e6)

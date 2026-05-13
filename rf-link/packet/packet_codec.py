@@ -107,7 +107,7 @@ def encode_size_for_payload(payload_len: int) -> int:
     """
     How many bytes the FEC encoder will produce for a given payload length.
 
-    Accounts for the +1 length byte.
+    Accounts for the +2 length bytes (big-endian) + 4 CRC bytes.
 
     Args:
         payload_len: Number of payload bytes
@@ -128,25 +128,12 @@ def max_encoded_size_for_payload(max_payload: int = 512) -> int:
     the length byte to determine where the real data ends.
 
     Args:
-        max_payload: Maximum expected payload length (default 256)
+        max_payload: Maximum expected payload length (default 512)
 
     Returns:
         Max FEC-encoded bytes to extract
     """
     return encode_size_for_payload(max_payload)
-
-
-# ── Helper: pack bits → bytes (unified) ──────────────────────
-def _bits_to_bytes(bits):
-    """Convert an iterable of 0/1 bits to bytes (MSB first)."""
-    packed = bytearray()
-    for i in range(0, len(bits), 8):
-        b = 0
-        for j in range(8):
-            if i + j < len(bits):
-                b |= (bits[i + j] & 1) << (7 - j)
-        packed.append(b)
-    return bytes(packed)
 
 
 # ── Self-test ──────────────────────────────────────────────────────
