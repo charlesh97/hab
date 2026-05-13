@@ -49,40 +49,78 @@ def rcc_taps(sps=SPS, alpha=0.35, ntaps=11):
     return taps / np.max(np.abs(taps))
 
 
-def scan_frequency(samples, search_width=10000, step=100):
+def scan_frequency(samples, search_width=10000):
     """
-    Estimate carrier frequency offset by finding the spectral centroid
-    within ±search_width Hz of DC.
+    Estimate carrier frequency offset by maximizing sync-word correlation.
 
-    Uses power-weighted centroid (center of mass) rather than peak-picking,
-    which is more robust against periodic preamble patterns.
+    Finds a high-energy segment, mixes by candidate FO values across
+    ±20 kHz, RRC filters, decimates, and finds the FO that gives the
+    strongest sync-word correlation peak.  Accurate to ±250 Hz.
+
+    Falls back to spectral centroid for software loopback (FO ≈ 0).
     """
-    nfft = min(262144, len(samples))
-    window = np.hanning(nfft)
-    seg = samples[:nfft] * window
-    spec = np.abs(np.fft.fftshift(np.fft.fft(seg)))**2
-    freqs = np.fft.fftshift(np.fft.fftfreq(nfft, 1.0 / FS))
-    center = nfft // 2
-
-    search_bins = int(search_width * nfft / FS)
-    lo = max(0, center - search_bins)
-    hi = min(nfft, center + search_bins + 1)
-
-    band_spec = spec[lo:hi].copy()
-    band_freqs = freqs[lo:hi]
-
-    # Subtract noise floor (median of the band)
-    noise_floor = np.median(band_spec)
-    band_spec -= noise_floor
-    band_spec = np.maximum(band_spec, 0)
-
-    # Power-weighted centroid
-    total_power = np.sum(band_spec)
-    if total_power < 1e-10:
+    from gnuradio.filter import firdes
+    
+    SYNC_WORD = 0xACDDA4E2
+    SYNC_BPSK = np.array([(SYNC_WORD >> (31 - i)) & 1 for i in range(32)],
+                         dtype=np.float64) * 2.0 - 1.0
+    
+    # Find a high-energy segment
+    n = min(131072, len(samples))
+    end = min(n * 16, len(samples))
+    energy = np.abs(samples[:end])
+    window = 65536
+    if len(energy) > window:
+        cs = np.cumsum(energy)
+        best_start = int(np.argmax(cs[window:] - cs[:-window]))
+    else:
+        best_start = 0
+    
+    seg = samples[best_start:best_start + n]
+    t_arr = np.arange(n, dtype=np.float64)
+    rrc_tmp = np.array(firdes.root_raised_cosine(1.0, SPS, 1.0, 0.35, 11 * SPS))
+    rrc_tmp /= np.max(np.abs(rrc_tmp))
+    
+    # RRC filter once, then rotate per candidate
+    filt_full = np.convolve(seg, rrc_tmp, 'same')
+    sym_ph0 = filt_full[0::SPS]
+    sym_ph10 = filt_full[10::SPS]
+    max_syms = min(5000, len(sym_ph0), len(sym_ph10))
+    sym_ph0 = sym_ph0[:max_syms]
+    sym_ph10 = sym_ph10[:max_syms]
+    t_sym0 = t_arr[0::SPS][:max_syms]
+    t_sym10 = t_arr[10::SPS][:max_syms]
+    
+    best_corr = 0.0
+    best_fo = 0.0
+    
+    for fo_candidate in np.arange(-20000, 20001, 500):
+        for syms, ts in [(sym_ph0, t_sym0), (sym_ph10, t_sym10)]:
+            rotated = syms * np.exp(-2j * np.pi * fo_candidate * ts / FS)
+            corr = np.abs(np.correlate(rotated, SYNC_BPSK, 'valid'))
+            m = np.max(corr)
+            if m > best_corr:
+                best_corr = m
+                best_fo = fo_candidate
+    
+    # If correlation is very weak, fall back to centroid
+    if best_corr < 100:
+        nfft = min(262144, len(samples))
+        seg_fft = samples[:nfft] * np.hanning(nfft)
+        spec = np.abs(np.fft.fftshift(np.fft.fft(seg_fft)))**2
+        freqs = np.fft.fftshift(np.fft.fftfreq(nfft, 1.0 / FS))
+        cn = nfft // 2
+        sb = int(search_width * nfft / FS)
+        lo, hi = max(0, cn - sb), min(nfft, cn + sb + 1)
+        band = spec[lo:hi].copy()
+        nf = np.median(band)
+        band = np.maximum(band - nf, 0)
+        tp = np.sum(band)
+        if tp > 1e-10:
+            return np.sum(freqs[lo:hi] * band) / tp
         return 0.0
-    centroid = np.sum(band_freqs * band_spec) / total_power
-
-    return centroid
+    
+    return best_fo
 
 
 def decode_payload_symbols(payload_syms):
@@ -194,6 +232,7 @@ class LiveReceiver:
         self.serial = serial
         self.duration = duration
         self.packets_found = 0
+        self._fo = None  # FO estimated once, reused across chunks
 
     def run(self):
         dev_str = (f'driver=hackrf,serial={self.serial}'
@@ -237,11 +276,21 @@ class LiveReceiver:
 
     def _process_chunk(self, samples):
         samples -= np.mean(samples)
-        fo = scan_frequency(samples)
+
+        # Estimate FO once from the first chunk with signal energy
+        if self._fo is None:
+            mag = np.abs(samples)
+            if np.max(mag) < 10:
+                return  # no signal in this chunk, wait for next
+            self._fo = scan_frequency(samples)
+            print(f"[EnhancedRX] FO estimate: {self._fo:.0f} Hz", flush=True)
+        fo = self._fo
+
         t = np.arange(len(samples), dtype=np.float64)
         bb = samples * np.exp(-2j * np.pi * fo * t / FS)
+        bb -= np.mean(bb)
         rrc = rcc_taps()
-        filtered = np.convolve(bb.real, rrc, 'same')
+        filtered = np.convolve(bb, rrc, 'same')
 
         all_results = []
         for phase in range(SPS):
