@@ -8,7 +8,7 @@ Tests the full TX→RX pipeline in software (no radio hardware):
   sync correlation → extract payload → packet_decode()
 """
 import sys, os, numpy as np
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from pkt_enhanced_tx import make_packet_bits, bpsk_modulate, make_test_burst
 from pkt_enhanced_rx import (

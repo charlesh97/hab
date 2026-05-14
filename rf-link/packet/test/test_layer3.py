@@ -16,7 +16,7 @@ Usage:
   python3 test_layer3.py --duration 15 --n-packets 20
 """
 import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 HAVE_HACKRF = False
 try:

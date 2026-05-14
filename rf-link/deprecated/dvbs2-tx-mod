@@ -1,0 +1,1126 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+#
+# SPDX-License-Identifier: GPL-3.0
+#
+# DVB-S2 Transmitter
+
+import ctypes
+import os
+import signal
+import sys
+import time
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from datetime import datetime
+from math import pi, sqrt
+from threading import Thread
+
+import pmt
+from packaging.version import Version as StrictVersion
+from PyQt5 import Qt, QtCore
+
+try:
+    from PyQt5 import sip
+except ImportError:
+    import sip
+
+from gnuradio import analog, blocks, dtv, dvbs2rx, eng_notation, filter, gr
+from gnuradio.dvbs2rx.utils import parse_version
+from gnuradio.eng_arg import eng_float, intx
+from gnuradio.fft import window
+from gnuradio.filter import firdes
+
+MAX_TX_GAIN = {'usrp': 65, 'bladeRF': 60, 'plutosdr': 89.75, 'hackrf': 47}
+MAX_FREQ = {'usrp': 6e9, 'bladeRF': 6e9, 'plutosdr': 6e9, 'hackrf': 6e9}
+MIN_FREQ = {'usrp': 10e6, 'bladeRF': 47e6, 'plutosdr': 70e6, 'hackrf': 1e6}
+
+
+def scale_rrc_taps(taps: list, sps: int, fullscale: float) -> list:
+    """Scale the RRC filter taps to satisfy a target output amplitude range
+
+    The input to the RRC filter normally consists of BPSK/QPSK/8PSK symbols
+    with unitary average energy (i.e., on the unit circle). After RRC pulse
+    shaping, the filtered samples are still close to unit magnitude near the
+    symbol indexes. However, in between these indexes, over the indexes filled
+    up by the interpolator, the amplitude typically exceeds the +-1 range. This
+    is a problem when feeding an SDR Tx interface like the USRP, which expects
+    samples given as floats within +-1 unless another full-scale amplitude is
+    configured at the device (via stream args).
+
+    This function conveniently scales the RRC filter taps to achieve a target
+    amplitude range. The resulting filtered I and Q amplitudes are expected to
+    be within +-fullscale, where fullscale is a parameter. This approach is
+    equivalent to placing a "multiply by constant" block after the RRC filter.
+
+    TODO: adjust the normalization when 16APSK and 32APSK are implemented, if
+    the constellation symbols are designed to exceed unit magnitude.
+
+    Args:
+        taps (list): List of RRC filter taps.
+        sps (int): Oversampling ratio.
+        fullscale (float): Target full-scale amplitude.
+
+    Returns:
+        list: List of scaled RRC taps.
+    """
+
+    # The peak complex IQ magnitude due to RRC filtering can be predicted by an
+    # upper-bound. The following is based on the method described in
+    # https://dsp.stackexchange.com/a/28808:
+    mag_taps = list(map(abs, taps))
+    max_sum = 0
+    for i in range(sps):
+        sum_i = sum(mag_taps[i::sps])
+        if sum_i > max_sum:
+            max_sum = sum_i
+    # max_sum is the maximum expected complex IQ magnitude. However, we want
+    # each I and Q within +-fullscale, not the complex magnitude. Assume I and
+    # Q have the same amplitude range so that the peak IQ magnitude is higher
+    # than the individual peak I and Q amplitudes by a factor of sqrt(2).
+    return [sqrt(2) * fullscale * x / max_sum for x in taps]
+
+
+class dvbs2_tx(gr.top_block, Qt.QWidget):
+
+    def __init__(self, options):
+        gr.top_block.__init__(self, "DVB-S2 Tx", catch_exceptions=True)
+
+        ##################################################
+        # Parameters
+        ##################################################
+        self.frame_size = options.frame_size
+        self.freq = options.freq
+        self.freq_offset = options.freq_offset
+        self.fullscale = None if (options.fullscale_no_limit or options.snr
+                                  is not None) else options.fullscale
+        self.gold_code = options.gold_code
+        self.gui = options.gui
+        self.gui_ctrl_panel = options.gui_ctrl_panel
+        self.gui_out_time = options.gui_out_time or options.gui_all
+        self.gui_out_freq = options.gui_out_freq or options.gui_all
+        self.in_fd = options.in_fd
+        self.in_file = options.in_file
+        self.in_repeat = options.in_repeat
+        self.out_iq_format = options.out_iq_format
+        self.out_real_time = options.out_real_time
+        self.modcod = options.modcod
+        self.out_fd = options.out_fd
+        self.out_file = options.out_file
+        self.pilots = options.pilots
+        self.rolloff = options.rolloff
+        self.rrc_delay = options.rrc_delay
+        self.sink = options.sink
+        self.snr = options.snr
+        self.source = options.source
+        self.sps = (options.samp_rate / options.sym_rate) \
+            if options.samp_rate is not None else options.sps
+        self.sym_rate = options.sym_rate
+        self.usrp = {
+            'antenna': options.usrp_antenna,
+            'args': options.usrp_args,
+            'channels': [0],
+            'clock_source': options.usrp_clock_source,
+            'gain': options.usrp_gain,
+            'otw_format': options.usrp_otw_format,
+            'stream_args': options.usrp_stream_args or '',
+            'subdev': options.usrp_subdev,
+            'sync': options.usrp_sync,
+            'time_source': options.usrp_time_source,
+        }
+        self.blade_rf = {
+            'bandwidth': options.bladerf_bw,
+            'bias_tee': {
+                0: options.bladerf_bias_tee and options.bladerf_chan == 0,
+                1: options.bladerf_bias_tee and options.bladerf_chan == 1,
+            },
+            'channel': options.bladerf_chan,
+            'dev': options.bladerf_dev,
+            'if_gain': options.bladerf_if_gain,
+            'ref_clk': options.bladerf_ref_clk,
+            'rf_gain': options.bladerf_rf_gain
+        }
+        self.plutosdr = {
+            'address': options.plutosdr_addr,
+            'buffer_size': options.plutosdr_buf_size,
+            'attenuation': options.plutosdr_attn,
+        }
+        self.hackrf = {
+            'amp': options.hackrf_amp,
+            'vga': options.hackrf_vga,
+            'serial': options.hackrf_serial
+        }
+
+        ##################################################
+        # Variables
+        ##################################################
+        code_rate = self.modcod.upper().replace("8PSK", "").replace("QPSK", "")
+        self.code_rate = code_rate
+        self.samp_rate = self.sym_rate * self.sps
+        self.constellation = self.modcod.replace(code_rate, "")
+        self.flowgraph_connected = False
+        self.plframe_len = dvbs2rx.params.pl_info(self.constellation,
+                                                  self.code_rate,
+                                                  self.frame_size,
+                                                  self.pilots)['plframe_len']
+        self.start_time = datetime.now()
+        self.uptime = datetime.now() - self.start_time
+
+        ##################################################
+        # Objects
+        ##################################################
+        self.hackrf_sink = None
+
+        ##################################################
+        # Flowgraph
+        ##################################################
+        if (self.gui):
+            self.setup_gui()
+        source_block = self.connect_source()
+        sink_block = self.connect_sink()
+        self.connect_dvbs2tx(source_block, sink_block)
+
+    def _uptime_monitoring(self, qtgui_label, period=1):
+        while (True):
+            self.uptime = datetime.now() - self.start_time
+            Qt.QMetaObject.invokeMethod(qtgui_label, "setText",
+                                        Qt.Q_ARG("QString", str(self.uptime)))
+            time.sleep(period)
+
+    def _get_time_sink(self, qtgui, name):
+        time_sink = qtgui.time_sink_c(
+            self.plframe_len,  # size
+            self.sym_rate,  # samp_rate
+            name,  # name
+            1,  # number of inputs
+            None  # parent
+        )
+        time_sink.set_update_time(0.10)
+        time_sink.set_y_axis(-1, 1)
+
+        time_sink.set_y_label('Amplitude', "")
+
+        time_sink.enable_tags(True)
+        time_sink.set_trigger_mode(qtgui.TRIG_MODE_FREE, qtgui.TRIG_SLOPE_POS,
+                                   0.0, 0, 0, "")
+        time_sink.enable_autoscale(True)
+        time_sink.enable_grid(True)
+        time_sink.enable_axis_labels(True)
+        time_sink.enable_control_panel(self.gui_ctrl_panel)
+        time_sink.enable_stem_plot(False)
+
+        labels = [
+            'I', 'Q', 'Signal 3', 'Signal 4', 'Signal 5', 'Signal 6',
+            'Signal 7', 'Signal 8', 'Signal 9', 'Signal 10'
+        ]
+        widths = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        colors = [
+            'blue', 'red', 'green', 'black', 'cyan', 'magenta', 'yellow',
+            'dark red', 'dark green', 'dark blue'
+        ]
+        alphas = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        styles = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        markers = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+
+        for i in range(2):
+            if len(labels[i]) == 0:
+                if (i % 2 == 0):
+                    time_sink.set_line_label(i, "Re{{Data {0}}}".format(i / 2))
+                else:
+                    time_sink.set_line_label(i, "Im{{Data {0}}}".format(i / 2))
+            else:
+                time_sink.set_line_label(i, labels[i])
+            time_sink.set_line_width(i, widths[i])
+            time_sink.set_line_color(i, colors[i])
+            time_sink.set_line_style(i, styles[i])
+            time_sink.set_line_marker(i, markers[i])
+            time_sink.set_line_alpha(i, alphas[i])
+
+        return time_sink
+
+    def _get_freq_sink(self, qtgui, name, ninput=1):
+        freq_sink = qtgui.freq_sink_c(
+            1024,  # size
+            window.WIN_BLACKMAN_hARRIS,  # wintype
+            self.freq,  # fc
+            self.samp_rate,  # bw
+            name,  # name
+            ninput,
+            None  # parent
+        )
+        freq_sink.set_update_time(0.10)
+        freq_sink.set_y_axis(-140, 10)
+        freq_sink.set_y_label('Relative Gain', 'dB')
+        freq_sink.set_trigger_mode(qtgui.TRIG_MODE_FREE, 0.0, 0, "")
+        freq_sink.enable_autoscale(True)
+        freq_sink.enable_grid(True)
+        freq_sink.set_fft_average(0.05)
+        freq_sink.enable_axis_labels(True)
+        freq_sink.enable_control_panel(self.gui_ctrl_panel)
+        freq_sink.set_fft_window_normalized(False)
+
+        labels = ['Before', 'After', '', '', '', '', '', '', '', '']
+        widths = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        colors = [
+            "blue", "red", "green", "black", "cyan", "magenta", "yellow",
+            "dark red", "dark green", "dark blue"
+        ]
+        alphas = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+        for i in range(ninput):
+            if len(labels[i]) == 0:
+                freq_sink.set_line_label(i, "Data {0}".format(i))
+            else:
+                freq_sink.set_line_label(i, labels[i])
+            freq_sink.set_line_width(i, widths[i])
+            freq_sink.set_line_color(i, colors[i])
+            freq_sink.set_line_alpha(i, alphas[i])
+
+        return freq_sink
+
+    def _add_gui_block(self, name, gui_obj, pos):
+        self.gui_blocks[name] = gui_obj
+
+        # For compatibility with GR 3.9 and 3.10, check both pyqwidget() and
+        # qwidget() from the QT GUI object.
+        if hasattr(gui_obj, 'pyqwidget'):
+            gui_obj_win = sip.wrapinstance(gui_obj.pyqwidget(), Qt.QWidget)
+        else:
+            gui_obj_win = sip.wrapinstance(gui_obj.qwidget(), Qt.QWidget)
+
+        self.top_grid_layout.addWidget(gui_obj_win, *pos)
+
+    def setup_gui(self):
+        from gnuradio import qtgui
+
+        Qt.QWidget.__init__(self)
+        self.setWindowTitle("DVB-S2 Tx")
+        qtgui.util.check_set_qss()
+        try:
+            self.setWindowIcon(Qt.QIcon.fromTheme('gnuradio-grc'))
+        except:
+            pass
+        self.top_scroll_layout = Qt.QVBoxLayout()
+        self.setLayout(self.top_scroll_layout)
+        self.top_scroll = Qt.QScrollArea()
+        self.top_scroll.setFrameStyle(Qt.QFrame.NoFrame)
+        self.top_scroll_layout.addWidget(self.top_scroll)
+        self.top_scroll.setWidgetResizable(True)
+        self.top_widget = Qt.QWidget()
+        self.top_scroll.setWidget(self.top_widget)
+        self.top_layout = Qt.QVBoxLayout(self.top_widget)
+        self.top_grid_layout = Qt.QGridLayout()
+        self.top_layout.addLayout(self.top_grid_layout)
+
+        self.settings = Qt.QSettings("GNU Radio", "dvbs2-tx")
+
+        try:
+            if StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
+                self.restoreGeometry(
+                    self.settings.value("geometry").toByteArray())
+            else:
+                self.restoreGeometry(self.settings.value("geometry"))
+        except:
+            pass
+
+        ##################################################
+        # Blocks
+        ##################################################
+        self.gui_blocks = {}
+        n_rows = 1
+        n_optional = self.gui_out_time + self.gui_out_freq
+        n_columns = max(n_optional, 1)
+
+        # Add labels
+        self.qtgui_label = {}
+        for label, var in zip(["MODCOD", "Frame Size", "Pilots", "Uptime"], [
+                self.modcod,
+                self.frame_size.capitalize(), "On" if self.pilots else "Off",
+                str(self.uptime)
+        ]):
+            qtgui_label_tool_bar = Qt.QToolBar(self)
+            qtgui_label_tool_bar.addWidget(Qt.QLabel(label + ": "))
+            self.qtgui_label[label] = Qt.QLabel(str(var))
+            qtgui_label_tool_bar.addWidget(self.qtgui_label[label])
+            self.top_layout.addWidget(qtgui_label_tool_bar)
+
+        # Keep updating the uptime label on a thread
+        self.uptime_thread = Thread(target=self._uptime_monitoring,
+                                    args=(self.qtgui_label["Uptime"], ),
+                                    daemon=True)
+        self.uptime_thread.start()
+
+        if (self.gui_out_time):
+            self._add_gui_block('time_sink_iq_out',
+                                self._get_time_sink(qtgui, "IQ Output"),
+                                (0, 0))
+
+        if (self.gui_out_freq):
+            pos = (0, 0) if n_optional <= 1 else (0, 1)
+            self._add_gui_block('freq_sink_iq_out',
+                                self._get_freq_sink(qtgui, "Output PSD"), pos)
+
+        # Optional SDR controls
+        if (self.sink in ['usrp', 'bladeRF', 'plutosdr', 'hackrf']):
+            if n_columns >= 2:
+                n_rows += 1
+                pos = [(1, 0), (1, 1)]
+            else:
+                n_rows += 2
+                pos = [(1, 0), (2, 0)]
+
+            # Gain
+            if self.sink == 'usrp':
+                initial_gain = self.usrp['gain']
+            elif self.sink == 'bladeRF':
+                initial_gain = self.blade_rf['rf_gain']
+            elif self.sink == 'plutosdr':
+                initial_gain = MAX_TX_GAIN['plutosdr'] - self.plutosdr[
+                    'attenuation']
+            elif self.sink == 'hackrf':
+                # HackRF TX gain is VGA (0-47 dB) + AMP (0 or 14 dB)
+                initial_gain = self.hackrf['vga'] + (14 if self.hackrf['amp'] else 0)
+
+            qt_gain_range = qtgui.Range(0, MAX_TX_GAIN[self.sink], 1,
+                                        initial_gain, 200)
+            gui_gain_widget = qtgui.RangeWidget(qt_gain_range,
+                                                self.set_gui_gain, "Gain",
+                                                "counter_slider", float,
+                                                QtCore.Qt.Horizontal)
+            self.top_grid_layout.addWidget(gui_gain_widget, *pos[0])
+
+            # Center Frequency
+            qt_freq_range = qtgui.Range(MIN_FREQ[self.sink],
+                                        MAX_FREQ[self.sink], 100e3, self.freq,
+                                        200)
+            gui_freq_widget = qtgui.RangeWidget(qt_freq_range,
+                                                self.set_gui_freq,
+                                                "Center Frequency",
+                                                "counter_slider", float,
+                                                QtCore.Qt.Horizontal)
+            self.top_grid_layout.addWidget(gui_freq_widget, *pos[1])
+
+        # Stretch columns and rows
+        for r in range(0, n_rows):
+            self.top_grid_layout.setRowStretch(r, 1)
+        for c in range(0, n_columns):
+            self.top_grid_layout.setColumnStretch(c, 1)
+
+    def setup_usrp_sink(self):
+        from gnuradio import uhd
+
+        self.usrp_sink = usrp_sink = uhd.usrp_sink(
+            self.usrp['args'],
+            uhd.stream_args(
+                cpu_format="fc32",
+                otw_format=self.usrp['otw_format'],
+                args=self.usrp['stream_args'],
+                channels=self.usrp['channels'],
+            ),
+            "",
+        )
+
+        chan = 0
+        if self.usrp['clock_source'] is not None:
+            usrp_sink.set_clock_source(self.usrp['clock_source'], chan)
+        if self.usrp['time_source'] is not None:
+            usrp_sink.set_time_source(self.usrp['time_source'], chan)
+        if self.usrp['subdev'] is not None:
+            usrp_sink.set_subdev_spec(self.usrp['subdev'], chan)
+        usrp_sink.set_samp_rate(self.samp_rate)
+        usrp_sink.set_center_freq(self.freq, chan)
+        usrp_sink.set_antenna(self.usrp['antenna'], chan)
+        usrp_sink.set_gain(self.usrp['gain'], chan)
+
+        # Set the device time
+        if self.usrp['sync'] == 'unknown_pps':
+            usrp_sink.set_time_unknown_pps(uhd.time_spec(0))
+        elif self.usrp['sync'] == 'pc_clock':
+            usrp_sink.set_time_now(uhd.time_spec(time.time()), uhd.ALL_MBOARDS)
+        elif self.usrp['sync'] == 'pc_clock_next_pps':
+            last_pps = usrp_sink.get_time_last_pps().get_real_secs()
+            while (usrp_sink.get_time_last_pps().get_real_secs() == last_pps):
+                time.sleep(0.05)
+            usrp_sink.set_time_next_pps(uhd.time_spec(int(time.time()) + 1.0))
+            time.sleep(1)
+        elif self.usrp['sync'] == 'gps_time':
+            usrp_sink.set_time_next_pps(
+                uhd.time_spec(
+                    usrp_sink.get_mboard_sensor("gps_time").to_int() + 1.0))
+            time.sleep(1)
+
+        # Get the sample rate actually set on the UHD device and adjust the
+        # oversampling ratio applied by the software resampler/interpolator
+        # so that the nominal symbol rate is reasonably accurate despite
+        # the imperfect USRP sampling rate. NOTE this adjustment works only
+        # if "connect_sink" is called before "connect_dvbs2tx".
+        assert not self.flowgraph_connected, \
+            "Sink must be connected before the flowgraph"
+        actual_samp_rate = usrp_sink.get_samp_rate()
+        self.sps = actual_samp_rate / self.sym_rate
+        self.samp_rate = actual_samp_rate
+
+        return usrp_sink
+
+    def setup_blade_rf_sink(self):
+        import bladeRF
+
+        self.blade_rf_sink = blade_rf_sink = bladeRF.sink(
+            args="numchan=" + str(1) + ",metadata=" + 'False' + ",bladerf=" +
+            self.blade_rf['dev'] + ",verbosity=" + 'verbose' + ",feature=" +
+            'default' + ",sample_format=" + '16bit' + ",fpga=" + str('') +
+            ",fpga-reload=" + 'False' + ",use_ref_clk=" + 'False' +
+            ",ref_clk=" + str(int(self.blade_rf['ref_clk'])) + ",in_clk=" +
+            'ONBOARD' + ",out_clk=" + str(False) + ",use_dac=" + 'False' +
+            ",dac=" + str(10000) + ",xb200=" + 'none' + ",tamer=" +
+            'internal' + ",sampling=" + 'internal' + ",lpf_mode=" +
+            'disabled' + ",smb=" + str(int(0)) + ",dc_calibration=" +
+            'LPF_TUNING' + ",trigger0=" + 'False' + ",trigger_role0=" +
+            'master' + ",trigger_signal0=" + 'J51_1' + ",trigger1=" + 'False' +
+            ",trigger_role1=" + 'master' + ",trigger_signal1=" + 'J51_1' +
+            ",bias_tee0=" + str(self.blade_rf['bias_tee'][0]) + ",bias_tee1=" +
+            str(self.blade_rf['bias_tee'][1]))
+
+        chan = self.blade_rf['channel']
+        blade_rf_sink.set_sample_rate(self.samp_rate)
+        blade_rf_sink.set_center_freq(self.freq, chan)
+        blade_rf_sink.set_bandwidth(self.blade_rf['bandwidth'], chan)
+        blade_rf_sink.set_gain(self.blade_rf['rf_gain'], chan)
+        blade_rf_sink.set_if_gain(self.blade_rf['if_gain'], chan)
+
+        return blade_rf_sink
+
+    def setup_plutosdr_sink(self):
+        from gnuradio import iio
+
+        cyclic = False
+        self.iio_pluto_sink = iio_pluto_sink = iio.fmcomms2_sink_fc32(
+            self.plutosdr['address']
+            if self.plutosdr['address'] else iio.get_pluto_uri(), [True, True],
+            self.plutosdr['buffer_size'], cyclic)
+
+        iio_pluto_sink.set_len_tag_key('')
+        iio_pluto_sink.set_bandwidth(
+            20000000)  # TODO confirm if required in auto mode
+        iio_pluto_sink.set_frequency(self.freq)
+        iio_pluto_sink.set_samplerate(int(self.samp_rate))
+        iio_pluto_sink.set_attenuation(0, self.plutosdr['attenuation'])
+        iio_pluto_sink.set_filter_params('Auto', '', 0, 0)
+
+        return iio_pluto_sink
+
+    def setup_hackrf_sink(self):
+        from gnuradio import soapy
+        
+        dev = 'driver=hackrf'
+        stream_args = ''
+        tune_args = ['']
+        settings = ['']
+        
+        # Set device_args with serial number if provided
+        if self.hackrf['serial'] is not None:
+            device_args = 'serial=' + self.hackrf['serial']
+        else:
+            device_args = ''
+        
+        self.hackrf_sink = hackrf_sink = soapy.sink(
+            dev, "fc32", 1, device_args, stream_args, tune_args, settings)
+        
+        hackrf_sink.set_sample_rate(0, self.samp_rate)
+        hackrf_sink.set_bandwidth(0, 0)
+        hackrf_sink.set_frequency(0, self.freq)
+        hackrf_sink.set_gain(0, 'AMP', self.hackrf['amp'])
+        hackrf_sink.set_gain(0, 'VGA', min(max(self.hackrf['vga'], 0.0), 47.0))
+        
+        return hackrf_sink
+
+    def connect_source(self):
+        """Connect the MPEG TS source
+
+        Returns:
+            block: Last block object on the source pipeline, which should
+            connect to the DVB-S2 Tx input.
+        """
+        if (self.source == "fd"):
+            source = blocks.file_descriptor_source(gr.sizeof_char, self.in_fd,
+                                                   False)
+        elif (self.source == "file"):
+            source = blocks.file_source(gr.sizeof_char, self.in_file,
+                                        self.in_repeat)
+            source.set_begin_tag(pmt.PMT_NIL)
+        return source
+
+    def connect_sink(self):
+        """Connect the IQ sample Sink
+
+        Returns:
+            block: First block on the sink pipeline, which should connect to
+            the DVB-S2 Tx output.
+        """
+
+        if (self.sink == "fd" or self.sink == "file"):
+            out_size = gr.sizeof_char if self.out_iq_format == "u8" else \
+                gr.sizeof_gr_complex
+
+            if (self.sink == "fd"):
+                file_or_fd_sink = blocks.file_descriptor_sink(
+                    out_size, self.out_fd)
+            else:
+                file_or_fd_sink = blocks.file_sink(out_size, self.out_file)
+
+            if (self.out_iq_format == "u8"):
+                # Convert the complex stream into an interleaved uchar stream.
+                complex_to_float_0 = blocks.complex_to_float(1)
+                multiply_const_0 = blocks.multiply_const_ff(128)
+                multiply_const_1 = blocks.multiply_const_ff(128)
+                add_const_0 = blocks.add_const_ff(127.5)
+                add_const_1 = blocks.add_const_ff(127.5)
+                float_to_uchar_0 = blocks.float_to_uchar()
+                float_to_uchar_1 = blocks.float_to_uchar()
+                interleaver = blocks.interleave(gr.sizeof_char, 1)
+                self.connect((complex_to_float_0, 0), (multiply_const_0, 0))
+                self.connect((complex_to_float_0, 1), (multiply_const_1, 0))
+                self.connect((multiply_const_0, 0), (add_const_0, 0),
+                             (float_to_uchar_0, 0), (interleaver, 0))
+                self.connect((multiply_const_1, 0), (add_const_1, 0),
+                             (float_to_uchar_1, 0), (interleaver, 1))
+                self.connect((interleaver, 0), (file_or_fd_sink, 0))
+
+            # First block on the sink pipeline
+            if self.out_real_time:
+                sink = throttle = blocks.throttle(gr.sizeof_gr_complex,
+                                                  self.samp_rate, True)
+                if (self.out_iq_format == "u8"):
+                    self.connect((throttle, 0), (complex_to_float_0, 0))
+                else:
+                    self.connect((throttle, 0), (file_or_fd_sink, 0))
+            else:
+                if (self.out_iq_format == "u8"):
+                    sink = complex_to_float_0
+                else:
+                    sink = file_or_fd_sink
+
+        elif self.sink == "usrp":
+            sink = self.setup_usrp_sink()
+        elif self.sink == "bladeRF":
+            sink = self.setup_blade_rf_sink()
+        elif self.sink == "plutosdr":
+            sink = self.setup_plutosdr_sink()
+        elif self.sink == "hackrf":
+            sink = self.setup_hackrf_sink()
+
+        # Simulation options
+        # 1) Noise
+        if (self.snr is not None):
+            Es = 1
+            EsN0_db = self.snr
+            EsN0 = 10**(EsN0_db / 10)
+            N0 = Es / EsN0
+            noise_source = analog.noise_source_c(analog.GR_GAUSSIAN,
+                                                 sqrt(N0 * self.sps), 0)
+            add_block = blocks.add_vcc(1)
+            self.connect((noise_source, 0), (add_block, 1))
+            self.connect((add_block, 0), (sink, 0))
+            sink = add_block  # new first block on the sink pipeline
+
+        # 2) Frequency offset
+        if (self.freq_offset is not None):
+            rotator_cc_0_0 = dvbs2rx.rotator_cc(
+                2 * pi * (self.freq_offset / self.samp_rate), False)
+            self.connect((rotator_cc_0_0, 0), (sink, 0))
+            sink = rotator_cc_0_0  # new first block on the sink pipeline
+
+        return sink
+
+    def connect_dvbs2tx(self, source_block, sink_block):
+        """Connect the DVB-S2 Tx Pipeline
+
+        Implement the following pipeline:
+
+        BBFRAME Processing -> BCH Enc. -> LDPC Enc. -> Interleaver ->|
+                                                                    |
+                                                                    |
+        <- Interpolator/Filter <- PL Framer <- Modulator (Mapping) <-|
+
+        Args:
+            source_block : The block providing IQ samples into the DVB-S2 Rx.
+            sink_block : The block consuming the MPEG TS output stream.
+
+
+        """
+
+        translated_params = dvbs2rx.params.translate('DVB-S2', self.frame_size,
+                                                     self.code_rate,
+                                                     self.constellation,
+                                                     self.rolloff, self.pilots)
+        (standard, frame_size, code_rate, constellation, rolloff,
+         pilots) = translated_params
+
+        bbheader = dtv.dvb_bbheader_bb(standard, frame_size, code_rate,
+                                       rolloff, dtv.INPUTMODE_NORMAL,
+                                       dtv.INBAND_OFF, 168, 4000000)
+        bbscrambler = dtv.dvb_bbscrambler_bb(standard, frame_size, code_rate)
+        bch_encoder = dtv.dvb_bch_bb(standard, frame_size, code_rate)
+        ldpc_encoder = dtv.dvb_ldpc_bb(standard, frame_size, code_rate,
+                                       dtv.MOD_OTHER)
+        interleaver = dtv.dvbs2_interleaver_bb(frame_size, code_rate,
+                                               constellation)
+        xfecframe_mapper = dtv.dvbs2_modulator_bc(frame_size, code_rate,
+                                                  constellation,
+                                                  dtv.INTERPOLATION_OFF)
+        pl_framer = dtv.dvbs2_physical_cc(frame_size, code_rate, constellation,
+                                          pilots, 0)
+
+        self.connect((source_block, 0), (bbheader, 0), (bbscrambler, 0),
+                     (bch_encoder, 0), (ldpc_encoder, 0), (interleaver, 0),
+                     (xfecframe_mapper, 0), (pl_framer, 0))
+
+        # The PL framer outputs an unfiltered sequence upsampled by 2 (i.e., a
+        # zero-interpolated sequence). Hence, upsample the remaining ratio
+        # (sps/2) to achieve an overall oversampling of sps samples per symbol.
+        interp_sps = self.sps / 2  # remaining ratio
+
+        # Use the polyphase arbitrary resampler if the remaining interpolation
+        # ratio is fractional. Otherwise, use the conventional integer-factor
+        # interpolating FIR filter for better performance.
+        if (interp_sps.is_integer()):
+            # The RRC taps must be designed for an oversampling of sps (the
+            # overall ratio) but the filter block should apply an upsampling of
+            # only "sps/2" given the PL framer already upsamples by 2.
+            ntaps = int(2 * self.rrc_delay * self.sps) + 1
+            rrc_taps = firdes.root_raised_cosine(
+                self.sps,  # gain (has to be equal to the total interp factor)
+                self.sps,  # overall oversampling ratio
+                1.0,  # symbol rate
+                self.rolloff,
+                ntaps)
+            if self.fullscale is not None:
+                rrc_taps = scale_rrc_taps(rrc_taps, int(self.sps),
+                                          self.fullscale)
+            interp_filter = filter.interp_fir_filter_ccf(
+                int(interp_sps), rrc_taps)
+            self.connect((pl_framer, 0), (interp_filter, 0))
+        else:
+            # The polyphase arbitrary resampler does not work well with the
+            # upsampled sequence produced by the PL framer. Hence, first, undo
+            # the PL framer's upsampling (downsample by 2). Then, interpolate
+            # the resulting symbol-spaced sequence by the full sps ratio.
+            downsampler = blocks.keep_m_in_n(gr.sizeof_gr_complex, 1, 2, 0)
+            nfilts = 32  # typically enough for low quantization error
+            ntaps = int(2 * nfilts * self.rrc_delay * self.sps) + 1
+            rrc_taps = filter.firdes.root_raised_cosine(
+                nfilts,  # gain (has to be equal to the number of pfb branches)
+                nfilts,  # sampling rate based on 32 filters in resampler
+                1.0,  # symbol rate
+                self.rolloff,
+                ntaps)
+            if self.fullscale is not None:
+                rrc_taps = scale_rrc_taps(rrc_taps, nfilts, self.fullscale)
+            interp_filter = filter.pfb_arb_resampler_ccf(self.sps, rrc_taps)
+            self.connect((pl_framer, 0), (downsampler, 0), (interp_filter, 0))
+
+        # The PL framer does not declare a delay due to its upsampling-by-2
+        # operation. Hence, consider the total oversampling ratio when
+        # declaring the interpolator's delay below. Also, note the same delay
+        # applies to both the polyphase and non-polyphase resamplers.
+        interp_filter.declare_sample_delay(int(self.rrc_delay * self.sps))
+
+        self.connect((interp_filter, 0), (sink_block, 0))
+
+        if (self.gui):
+            if (self.gui_out_time):
+                self.connect((interp_filter, 0),
+                             (self.gui_blocks['time_sink_iq_out'], 0))
+            if (self.gui_out_freq):
+                self.connect((interp_filter, 0),
+                             (self.gui_blocks['freq_sink_iq_out'], 0))
+
+        self.flowgraph_connected = True
+
+    def setStyleSheetFromFile(self, theme):
+        try:
+            prefixes = [gr.prefix(), "/usr/local", "/usr"]
+            found = False
+            for prefix in prefixes:
+                filename = os.path.join(prefix, "share", "gnuradio", "themes",
+                                        theme)
+                if os.path.exists(filename):
+                    found = True
+                    break
+            if (not found):
+                gr.log.error("Failed to locate theme {}".format(theme))
+                return False
+            with open(filename) as ss:
+                self.setStyleSheet(ss.read())
+        except Exception as e:
+            gr.log.error(str(e))
+            return False
+        return True
+
+    def set_gui_gain(self, new_gain):
+        if self.sink == 'usrp':
+            self.usrp['gain'] = new_gain
+            self.usrp_sink.set_gain(self.usrp['gain'], 0)
+        elif self.sink == 'bladeRF':
+            self.blade_rf['rf_gain'] = new_gain
+            self.blade_rf_sink.set_gain(self.blade_rf['rf_gain'],
+                                        self.blade_rf['channel'])
+        elif self.sink == 'plutosdr':
+            # The PlutoSDR Tx gain is defined as an attenuation
+            self.plutosdr['attenuation'] = MAX_TX_GAIN['plutosdr'] - new_gain
+            self.iio_pluto_sink.set_attenuation(0,
+                                                self.plutosdr['attenuation'])
+        elif self.sink == 'hackrf':
+            # HackRF TX: distribute gain between AMP (0 or 14 dB) and VGA (0-47 dB)
+            if new_gain <= 14:
+                self.hackrf['amp'] = False
+                self.hackrf['vga'] = min(new_gain, 47)
+            elif new_gain <= 47:
+                self.hackrf['amp'] = False
+                self.hackrf['vga'] = new_gain
+            else:
+                self.hackrf['amp'] = True
+                self.hackrf['vga'] = min(new_gain - 14, 47)
+            self.hackrf_sink.set_gain(0, 'AMP', self.hackrf['amp'])
+            self.hackrf_sink.set_gain(0, 'VGA', self.hackrf['vga'])
+
+    def set_gui_freq(self, new_freq):
+        self.freq = new_freq
+        if self.sink == 'usrp':
+            self.usrp_sink.set_center_freq(self.freq, 0)
+        elif self.sink == 'bladeRF':
+            self.blade_rf_sink.set_center_freq(self.freq,
+                                               self.blade_rf['channel'])
+        elif self.sink == 'plutosdr':
+            self.iio_pluto_sink.set_frequency(self.freq)
+        elif self.sink == 'hackrf':
+            self.hackrf_sink.set_frequency(0, self.freq)
+
+        for gui_block in ['freq_sink_iq_out']:
+            if gui_block in self.gui_blocks:
+                self.gui_blocks[gui_block].set_frequency_range(
+                    self.freq, self.samp_rate)
+
+
+def argument_parser():
+    description = 'DVB-S2 Transmitter'
+    parser = ArgumentParser(prog="dvbs2-tx",
+                            description=description,
+                            formatter_class=ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-v',
+                        '--version',
+                        action='version',
+                        version=parse_version(dvbs2rx))
+    parser.add_argument("--frame-size",
+                        type=str,
+                        choices=['normal', 'short'],
+                        default='normal',
+                        help="FECFRAME size")
+    parser.add_argument("-f",
+                        "--freq",
+                        type=eng_float,
+                        default=eng_notation.num_to_str(float(1e9)),
+                        help="Carrier or intermediate frequency in Hz")
+    parser.add_argument("--gold-code", type=intx, default=0, help="Gold code")
+    parser.add_argument("-m",
+                        "--modcod",
+                        type=str,
+                        default='QPSK1/4',
+                        help="MODCOD")
+    parser.add_argument("--pilots",
+                        action='store_true',
+                        default=False,
+                        help="Include pilot blocks on the PLFRAMEs")
+    parser.add_argument("-r",
+                        "--rolloff",
+                        choices=[0.35, 0.25, 0.2],
+                        type=eng_float,
+                        default=eng_notation.num_to_str(float(0.2)),
+                        help="Rolloff factor")
+    parser.add_argument("--rrc-delay",
+                        type=intx,
+                        default=50,
+                        help="RRC filter delay in symbol periods")
+    samp_rate_group = parser.add_mutually_exclusive_group()
+    samp_rate_group.add_argument(
+        "-o",
+        "--sps",
+        type=eng_float,
+        default=eng_notation.num_to_str(float(2)),
+        help="Oversampling ratio in samples per symbol")
+    samp_rate_group.add_argument("--samp-rate",
+                                 type=eng_float,
+                                 help="Sampling rate in samples per second")
+    parser.add_argument("-s",
+                        "--sym-rate",
+                        type=eng_float,
+                        default=eng_notation.num_to_str(float(1000000)),
+                        help="Symbol rate in bauds")
+    parser.add_argument("--fullscale",
+                        type=float,
+                        default=1.0,
+                        help="Target full-scale amplitude for the output IQ")
+    parser.add_argument(
+        "--fullscale-no-limit",
+        action='store_true',
+        default=False,
+        help="Ignore the --fullscale option and do not limit the IQ amplitude")
+
+    gui_group = parser.add_argument_group('GUI Options')
+    gui_group.add_argument("--gui",
+                           action='store_true',
+                           default=False,
+                           help="Launch a graphical user interface (GUI).")
+    gui_group.add_argument(
+        "--gui-out-time",
+        action='store_true',
+        default=False,
+        help="Add widget to display the output IQ in the time domain.")
+    gui_group.add_argument(
+        "--gui-out-freq",
+        action='store_true',
+        default=False,
+        help="Add widget to display the output IQ in the frequency domain.")
+    gui_group.add_argument("--gui-all",
+                           action='store_true',
+                           default=False,
+                           help="Enable all available GUI widgets.")
+    gui_group.add_argument("--gui-dark",
+                           action='store_true',
+                           default=False,
+                           help="Launch the GUI in dark mode.")
+    gui_group.add_argument('--gui-ctrl-panel',
+                           action='store_true',
+                           default=False,
+                           help="Enable the available widget control panels")
+
+    src_group = parser.add_argument_group('Source Options')
+    src_group.add_argument("--source",
+                           choices=["fd", "file"],
+                           default="fd",
+                           help="Source of the input MPEG transport stream")
+    src_group.add_argument("--in-fd",
+                           type=intx,
+                           default=0,
+                           help="Input file descriptor used if source=fd")
+    src_group.add_argument("--in-file",
+                           type=str,
+                           help="Input file used if source=file")
+    src_group.add_argument(
+        "--in-repeat",
+        action='store_true',
+        default=False,
+        help="Read repeatedly from the input file if source=file")
+
+    snk_group = parser.add_argument_group('Sink Options')
+    snk_group.add_argument(
+        "--sink",
+        choices=["fd", "file", "usrp", "bladeRF", "plutosdr", "hackrf"],
+        default="fd",
+        help="Sink for the output IQ sample stream")
+    snk_group.add_argument("--out-fd",
+                           type=intx,
+                           default=1,
+                           help="Output file descriptor used if sink=fd")
+    snk_group.add_argument("--out-file",
+                           type=str,
+                           help="Output file used if sink=file")
+    snk_group.add_argument("--out-iq-format",
+                           choices=['fc32', 'u8'],
+                           default='fc32',
+                           help="Output IQ format")
+    snk_group.add_argument(
+        "--out-real-time",
+        action='store_true',
+        default=False,
+        help="Throttle the output to simulate the sample rate. Applicable if "
+        "source=file or source=fd.")
+
+    usrp_group = parser.add_argument_group('USRP Options')
+    usrp_group.add_argument(
+        "--usrp-args",
+        type=str,
+        help="USRP device address arguments as a comma-delimited string with "
+        "key=value pairs")
+    usrp_group.add_argument("--usrp-antenna",
+                            type=str,
+                            default="TX/RX",
+                            help="USRP antenna")
+    usrp_group.add_argument("--usrp-clock-source",
+                            type=str,
+                            choices=['internal', 'external', 'mimo', 'gpsdo'],
+                            help="USRP clock source")
+    usrp_group.add_argument("--usrp-gain",
+                            type=float,
+                            default=0,
+                            help="USRP Tx gain")
+    usrp_group.add_argument("--usrp-otw-format",
+                            type=str,
+                            choices=['sc16', 'sc12', 'sc8'],
+                            default='sc16',
+                            help="USRP over-the-wire data format")
+    usrp_group.add_argument(
+        "--usrp-stream-args",
+        type=str,
+        help="USRP Tx streaming arguments as a comma-delimited string with "
+        "key=value pairs")
+    usrp_group.add_argument("--usrp-subdev",
+                            type=str,
+                            help="USRP subdevice specification")
+    usrp_group.add_argument("--usrp-sync",
+                            type=str,
+                            choices=[
+                                'unknown_pps', 'pc_clock', 'pc_clock_next_pps',
+                                'gps_time', 'none'
+                            ],
+                            default='unknown_pps',
+                            help="USRP device time synchronization method")
+    usrp_group.add_argument("--usrp-time-source",
+                            type=str,
+                            choices=['external', 'mimo', 'gpsdo'],
+                            help="USRP time source")
+
+    brf_group = parser.add_argument_group('bladeRF Options')
+    brf_group.add_argument('--bladerf-rf-gain',
+                           type=float,
+                           default=10,
+                           help="RF gain in dB")
+    brf_group.add_argument('--bladerf-if-gain',
+                           type=float,
+                           default=20,
+                           help="Intermediate frequency gain in dB")
+    brf_group.add_argument(
+        '--bladerf-bw',
+        type=eng_float,
+        default=2e6,
+        help="Bandwidth in Hz of the radio frontend's bandpass filter. "
+        "Set to zero to use the default (automatic) setting.")
+    brf_group.add_argument(
+        '--bladerf-dev',
+        type=str,
+        default='0',
+        help="Device serial id. When not specified, the first "
+        "available device is used.")
+    brf_group.add_argument('--bladerf-bias-tee',
+                           action='store_true',
+                           default=False,
+                           help="Enable the Tx bias tee")
+    brf_group.add_argument('--bladerf-chan',
+                           type=int,
+                           choices=[0, 1],
+                           default=0,
+                           help='Channel')
+    brf_group.add_argument('--bladerf-ref-clk',
+                           type=eng_float,
+                           default=10e6,
+                           help="Reference clock in Hz")
+
+    pluto_group = parser.add_argument_group('PlutoSDR Options')
+    pluto_group.add_argument('--plutosdr-addr',
+                             type=str,
+                             help="IP address of the unit")
+    pluto_group.add_argument('--plutosdr-buf-size',
+                             type=int,
+                             default=32768,
+                             help="Size of the internal buffer in samples")
+    pluto_group.add_argument('--plutosdr-attn',
+                             type=int,
+                             default=10,
+                             help="TX1 attenuation in dB")
+
+    hackrf_group = parser.add_argument_group('HackRF Options')
+    hackrf_group.add_argument('--hackrf-amp',
+                              action='store_true',
+                              default=False,
+                              help="Enable HackRF RF amplifier (0 or 14 dB)")
+    hackrf_group.add_argument('--hackrf-vga',
+                              type=float,
+                              default=16,
+                              help="HackRF VGA gain in dB (0-47 dB, step 1 dB)")
+    hackrf_group.add_argument('--hackrf-serial',
+                              type=str,
+                              default=None,
+                              help="HackRF device serial number (e.g., 000000000000000060a464dc3674640f)")
+
+    sim_group = parser.add_argument_group('Simulation Options')
+    sim_group.add_argument(
+        "--snr",
+        type=eng_float,
+        help="Signal-to-noise ratio to simulate on the output stream")
+    sim_group.add_argument(
+        "--freq-offset",
+        type=eng_float,
+        help="Frequency offset in Hz to simulate on the output stream")
+
+    options = parser.parse_args()
+
+    if (options.sink == "usrp" and options.usrp_args is None):
+        parser.error("argument --usrp-args is required when --sink=\"usrp\"")
+
+    min_bw = (1 + options.rolloff) * options.sym_rate
+    if (options.sink == "bladeRF" and options.bladerf_bw != 0
+            and options.bladerf_bw < min_bw):
+        parser.error(
+            "argument --bladerf-bw should be greater than {} Hz".format(
+                min_bw))
+
+    samp_rate = (options.samp_rate if options.samp_rate is not None else
+                 options.sps * options.sym_rate)
+    if (options.sink == "plutosdr" and not samp_rate.is_integer()):
+        parser.error("An integer sample rate is required by the PlutoSDR")
+    
+    # Validate HackRF gain ranges
+    if options.sink == "hackrf":
+        if not (0 <= options.hackrf_vga <= 47):
+            parser.error("--hackrf-vga must be between 0 and 47 dB")
+
+    return options
+
+
+def main():
+    options = argument_parser()
+
+    gui_mode = options.gui
+    if (gui_mode):
+        if sys.platform.startswith('linux'):
+            try:
+                x11 = ctypes.cdll.LoadLibrary('libX11.so')
+                x11.XInitThreads()
+            except:
+                pass
+
+        if StrictVersion("4.5.0") <= StrictVersion(
+                Qt.qVersion()) < StrictVersion("5.0.0"):
+            style = gr.prefs().get_string('qtgui', 'style', 'raster')
+            Qt.QApplication.setGraphicsSystem(style)
+        qapp = Qt.QApplication(sys.argv)
+
+    tb = dvbs2_tx(options)
+    tb.start()
+
+    def sig_handler(sig=None, frame=None):
+        tb.stop()
+        tb.wait()
+        if (gui_mode):
+            Qt.QApplication.quit()
+        else:
+            sys.exit(0)
+
+    signal.signal(signal.SIGINT, sig_handler)
+    signal.signal(signal.SIGTERM, sig_handler)
+
+    if (gui_mode):
+        if (options.gui_dark):
+            if not tb.setStyleSheetFromFile("dvbs2_dark.qss"):
+                tb.setStyleSheetFromFile("dark.qss")
+        tb.show()
+        timer = Qt.QTimer()
+        timer.start(500)
+        timer.timeout.connect(lambda: None)
+        qapp.exec_()
+    else:
+        tb.wait()
+
+
+if __name__ == '__main__':
+    main()

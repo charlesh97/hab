@@ -1,0 +1,5 @@
+gr-dvbs2rx ([%version%]-[%rev%]) [%distroseries%]; urgency=medium
+
+  * Release [%version%].
+
+ -- Igor Freire <igor@ifcomm.com.br>  [%date%]

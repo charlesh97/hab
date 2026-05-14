@@ -5,7 +5,7 @@ Layer 1 — Direct Codec Unit Tests.
 Tests packet_codec.py encode/decode round trip with no radio involvement.
 """
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 from packet_codec import packet_encode, packet_decode, encode_size_for_payload
 
 
