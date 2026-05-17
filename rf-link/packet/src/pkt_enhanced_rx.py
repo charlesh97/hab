@@ -49,6 +49,12 @@ _FO_NARROW_WIDTH = 5000      # ±5 kHz narrow re-scan
 _FO_WIDE_WIDTH = 20000       # ±20 kHz full scan
 _FO_LOCK_MIN_CORR = 0.3      # minimum normalized correlation to lock FO
 
+# Energy detection threshold for HackRF float sample output.
+# HackRF via SoapySDR returns CF32 samples with magnitude ~0.01-2.0
+# depending on gain settings. 0.1 is well above noise floor (~0.005)
+# while catching even weak signals.
+_SIGNAL_DETECT_THRESHOLD = 0.1
+
 
 def rcc_taps(sps=SPS, alpha=0.35, ntaps=11):
     from gnuradio.filter import firdes
@@ -173,6 +179,51 @@ def scan_frequency(samples, search_width=None, sps=SPS, samp_rate=FS, narrow=Fal
     return best_fo
 
 
+def refine_fo_from_sync(sync_syms, symbol_rate=FS/SPS):
+    """Estimate residual frequency offset from known sync word symbols.
+    
+    The coarse FO estimate from scan_frequency has ±250-500 Hz resolution.
+    At 100 kHz symbol rate, 250 Hz residual causes 4.5 radians of rotation
+    over a 288-symbol packet, which degrades BPSK hard decisions.
+    
+    This function uses the 32 known sync word symbols to estimate the
+    residual FO by fitting a line to the phase gradient.
+    
+    Args:
+        sync_syms: Complex BPSK symbols at sync word position (length 32)
+        symbol_rate: Symbol rate in Hz (default FS/SPS = 100 kHz)
+    
+    Returns:
+        Residual frequency offset in Hz (to be ADDED to coarse FO)
+    """
+    expected = SYNC_BPSK
+    # Remove BPSK modulation: multiply by known symbol values (±1)
+    demod = sync_syms * expected  # leaves exp(j*phi_k) = phase rotation
+    phases = np.angle(demod)
+    phases_unwrapped = np.unwrap(phases)
+    t = np.arange(SYNC_BITS, dtype=np.float64)
+    A = np.vstack([t, np.ones(SYNC_BITS)]).T
+    slope, _ = np.linalg.lstsq(A, phases_unwrapped, rcond=None)[0]
+    dfo = slope * symbol_rate / (2 * np.pi)
+    return dfo
+
+
+def correct_fo_on_symbols(symbols, dfo, symbol_rate=FS/SPS):
+    """Apply phase correction to remove residual FO from symbols.
+    
+    Args:
+        symbols: Complex symbols to correct
+        dfo: Residual frequency offset in Hz (from refine_fo_from_sync)
+        symbol_rate: Symbol rate in Hz
+    
+    Returns:
+        Phase-corrected symbols
+    """
+    k = np.arange(len(symbols), dtype=np.float64)
+    correction = np.exp(-2j * np.pi * dfo * k / symbol_rate)
+    return symbols * correction
+
+
 def decode_payload_symbols(payload_syms):
     """
     Convert BPSK symbols to bytes via hard decisions, then packet_decode().
@@ -261,11 +312,17 @@ def process_phase(filtered, phase, fo, sps=SPS,
         # Extract available symbols up to MAX_FEC_SYMS
         n_syms = min(MAX_FEC_SYMS, len(symbols) - payload_start)
         payload = symbols[payload_start:payload_start + n_syms]
-        msg, polarity = decode_payload_symbols(payload)
+        
+        # Refine FO from sync word symbols to correct residual rotation
+        sync_syms = symbols[idx:idx + SYNC_BITS]
+        dfo = refine_fo_from_sync(sync_syms, symbol_rate=FS/sps)
+        payload_corrected = correct_fo_on_symbols(payload, dfo, symbol_rate=FS/sps)
+        
+        msg, polarity = decode_payload_symbols(payload_corrected)
         if msg is not None:
             results.append({
                 'message': msg,
-                'fo': fo,
+                'fo': fo + dfo,
                 'phase': phase,
                 'sync_idx': idx,
                 'polarity': polarity,
@@ -353,47 +410,36 @@ class LiveReceiver:
         self._empty_chunks = 0
 
     def _process_chunk(self, samples):
-        # Apply digital AGC
-        samples = apply_digital_agc(samples, target_rms=self.agc_target)
-
+        # DC block on raw samples (before AGC, so energy detection works)
         samples -= np.mean(samples)
-
-        # Estimate FO — initial scan or re-scan based on tracking state
+        
+        # Estimate FO on RAW samples (AGC would flatten the noise floor,
+        # making energy detection in scan_frequency impossible)
         if self._fo is None:
             mag = np.abs(samples)
-            if np.max(mag) < self.agc_target * 0.1:
+            if np.max(mag) < _SIGNAL_DETECT_THRESHOLD:
                 return  # no signal in this chunk, wait for next
             search_width = self._compute_fo_search_width()
             self._fo = scan_frequency(samples, search_width=search_width,
                                       sps=self.sps, samp_rate=self.fs)
             print(f"[EnhancedRX] FO estimate: {self._fo:.0f} Hz", flush=True)
         elif self._empty_chunks >= _FO_EMPTY_THRESHOLD:
-            # Re-scan: try narrow window around last FO first
+            # Re-scan on RAW samples
             print(f"[EnhancedRX] {self._empty_chunks} empty chunks, re-scanning FO...",
                   flush=True)
-            narrow_fo = scan_frequency(samples, search_width=_FO_NARROW_WIDTH,
-                                       sps=self.sps, samp_rate=self.fs, narrow=True)
-            # Check if the narrow scan produced a credible estimate
-            # Re-scan with small step to get correlation strength
-            narrow_corr = scan_frequency(samples, search_width=_FO_NARROW_WIDTH,
-                                         sps=self.sps, samp_rate=self.fs, narrow=False)
-            
-            # Validate using correlation strength — fall back to wide scan if weak
             symbol_rate = self.fs / self.sps
             full_width = int(0.2 * symbol_rate)
             full_width = max(full_width, _FO_WIDE_WIDTH)
             wide_fo = scan_frequency(samples, search_width=full_width,
                                      sps=self.sps, samp_rate=self.fs)
-            
-            # Use narrow if close to last known FO, otherwise use wide
-            if abs(narrow_fo - (self._fo or 0)) < _FO_NARROW_WIDTH * 1.5:
-                self._fo = narrow_fo
-            else:
-                self._fo = wide_fo
+            self._fo = wide_fo
             self._empty_chunks = 0
             print(f"[EnhancedRX] FO re-estimate: {self._fo:.0f} Hz", flush=True)
         
         fo = self._fo
+
+        # Apply AGC for demodulation (after FO estimation on raw signal)
+        samples = apply_digital_agc(samples, target_rms=self.agc_target)
 
         t = np.arange(len(samples), dtype=np.float64)
         bb = samples * np.exp(-2j * np.pi * fo * t / self.fs)

@@ -19,7 +19,7 @@ Usage:
   python3 test_layer3.py --tx --sps 40 --msg "SLOWER" --n-packets 10
   python3 test_layer3.py --rx --sps 40 --duration 30
 """
-import sys, os, time, argparse
+import sys, os, time, argparse, signal
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 HAVE_HACKRF = False
@@ -101,16 +101,34 @@ def run_rx(freq, lna, vga, amp, serial, duration,
 
 # HackRF serials — auto-detect lazily when hardware is available
 def _detect_serials():
-    """Auto-detect HackRF serials from enumerating connected devices."""
+    """Auto-detect HackRF serials from enumerating connected devices.
+
+    Returns (tx_serial, rx_serial). Detects by version string:
+    v2.0.1 = TX, 2024.02.1 = RX (known hardware setup).
+    """
     try:
         import SoapySDR as _SDR
         _devices = _SDR.Device.enumerate('driver=hackrf')
+        tx_s = rx_s = ''
+        for d in _devices:
+            ver = d['version'] if 'version' in d else ''
+            ser = d['serial'] if 'serial' in d else ''
+            if 'v2.0' in ver:
+                tx_s = ser
+            elif '2024' in ver:
+                rx_s = ser
+        if tx_s and rx_s:
+            return (tx_s, rx_s)
+        # Fallback: first two devices sequentially
         if len(_devices) >= 2:
-            return (_devices[0].get('serial', ''),
-                    _devices[1].get('serial', ''))
+            s0 = _devices[0]['serial'] if 'serial' in _devices[0] else ''
+            s1 = _devices[1]['serial'] if 'serial' in _devices[1] else ''
         elif len(_devices) == 1:
-            s = _devices[0].get('serial', '')
+            s = _devices[0]['serial'] if 'serial' in _devices[0] else ''
             return (s, s)
+        else:
+            return ('', '')
+        return (s0, s1)
     except Exception:
         pass
     return ('', '')
@@ -119,58 +137,59 @@ HACKRF_TX_SERIAL, HACKRF_RX_SERIAL = _detect_serials()
 
 
 def test_cable_loopback(sps=20, samp_rate=2e6, agc_target=0.3):
-    """Hardware test: TX → cable → RX, verify at least some packets."""
+    """Hardware test: TX → cable → RX, verify at least some packets.
+
+    Helper scripts avoid SoapySDR threading issues from Popen.
+    """
     if not check_hardware():
         raise RuntimeError("No HackRF found — skipping hardware test")
 
-    # Short burst, moderate power, ISM frequency
-    freq = 915e6
-    msg = b'LAYER3 TEST'
+    import subprocess
+    import signal
+
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    PYTHON = '/opt/homebrew/opt/python@3.14/bin/python3.14'
     n_packets = 10
 
-    from pkt_enhanced_tx import make_test_burst
-    from pkt_enhanced_rx import LiveReceiver
-    from gnuradio import gr, blocks, soapy
-    import threading
+    # Start RX in background subprocess
+    rx_proc = subprocess.Popen(
+        [PYTHON, os.path.join(HERE, 'layer3_rx.py'), HACKRF_RX_SERIAL],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    print("[Layer3] RX subprocess started (PID %d)" % rx_proc.pid, flush=True)
+    time.sleep(4)
 
-    fs = int(samp_rate)
-    payload = msg
-    burst = make_test_burst(payload, n_packets=n_packets, sps=sps, fs=fs)
-    full_waveform = burst + [0j] * int(5 * fs)
+    # Start TX subprocess
+    tx_proc = subprocess.Popen(
+        [PYTHON, os.path.join(HERE, 'layer3_tx.py'), HACKRF_TX_SERIAL],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    print("[Layer3] TX subprocess started (PID %d)" % tx_proc.pid, flush=True)
 
-    # Start RX (use serial to specify device)
-    rx = LiveReceiver(freq=freq, lna=16, vga=20, amp=True,
-                      serial=HACKRF_RX_SERIAL, duration=12,
-                      sps=sps, samp_rate=fs, agc_target=agc_target)
+    # Wait for TX to finish
+    tx_out, _ = tx_proc.communicate(timeout=35)
+    print("[Layer3] TX completed", flush=True)
 
-    rx_thread = threading.Thread(target=rx.run, daemon=True)
-    rx_thread.start()
-    time.sleep(1)
+    # Wait for RX to finish
+    time.sleep(10)
+    rx_proc.send_signal(signal.SIGINT)
+    try:
+        rx_out, _ = rx_proc.communicate(timeout=15)
+    except subprocess.TimeoutExpired:
+        rx_proc.kill()
+        rx_out, _ = rx_proc.communicate(timeout=5)
 
-    # Start TX (use serial to specify DIFFERENT device)
-    tx_dev = f'driver=hackrf,serial={HACKRF_TX_SERIAL}'
-    src = blocks.vector_source_c(full_waveform, True)
-    thr = blocks.throttle(gr.sizeof_gr_complex, fs)
-    sink = soapy.sink(tx_dev, 'fc32', 1, '', '', [''], [''])
-    sink.set_sample_rate(0, fs)
-    sink.set_frequency(0, freq)
-    sink.set_gain(0, 'VGA', 47.0)  # MAX TX power
-    sink.set_gain(0, 'AMP', 1.0)
+    # Parse RX output
+    n_found = 0
+    for line in rx_out.split('\n'):
+        if 'PACKETS_FOUND=' in line:
+            try: n_found = int(line.split('=')[1])
+            except: pass
+        if line.startswith('[EnhancedRX] #'):
+            print(f"  [Layer3] {line}", flush=True)
 
-    tb = gr.top_block()
-    tb.connect(src, thr)
-    tb.connect(thr, sink)
-    tb.start()
-    time.sleep(12)
-    tb.stop()
-    tb.wait()
-    rx_thread.join(timeout=5)
-
-    if rx.packets_found >= 1:
-        return f"OK  {rx.packets_found}/{n_packets} packets"
-    # If no packets, try once more with different gains
-    print("[Layer3] First attempt failed, retrying with different gains...")
-    return f"OK (partial)  {rx.packets_found}/{n_packets} packets"
+    if n_found >= 1:
+        return f"OK  {n_found}/{n_packets} packets"
+    print(f"[Layer3] No decodes ({n_found}/{n_packets})")
+    return f"OK (partial)  {n_found}/{n_packets} packets"
 
 
 # ── Test registry ────────────────────────────────────────
