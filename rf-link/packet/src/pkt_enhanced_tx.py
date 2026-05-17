@@ -26,7 +26,7 @@ PREAMBLE_BYTES = bytes([
     0x0f, 0xc0, 0x03, 0x80, 0x00, 0xff, 0xff, 0xc0
 ])  # 24 bytes = 192 bits
 
-# Sync word: GNU Radio default access code (from preamble_dummy in packet_rx.py)
+# Sync word: GNU Radio default access code (from packet_rx.py preamble_dummy)
 # This is DIFFERENT from the first 4 bytes of the preamble, giving unambiguous
 # correlation.
 SYNC_WORD = 0xACDDA4E2
@@ -60,6 +60,34 @@ def bpsk_modulate(bits, sps=SPS, alpha=RRC_ALPHA):
     return waveform.astype(np.complex64).tolist()
 
 
+def apply_burst_shaping(waveform, sps=SPS, ramp_symbols=50):
+    """Apply Hann ramp at start and end of each packet burst.
+    
+    Prevents spectral splatter from hard amplitude transients.
+    Applied in-place to the complex waveform.
+    
+    Args:
+        waveform: numpy array of complex samples
+        sps: Samples per symbol
+        ramp_symbols: Number of symbols for the Hann ramp (default 50)
+    
+    Returns:
+        Shaped waveform (same array, modified in-place)
+    """
+    ramp_len = min(ramp_symbols * sps, len(waveform) // 2)
+    if ramp_len < 2:
+        return waveform
+    
+    # Hann window for the ramp
+    hann = np.hanning(2 * ramp_len)  # full Hann window
+    # Rising edge at start
+    waveform[:ramp_len] *= hann[:ramp_len]
+    # Falling edge at end
+    waveform[-ramp_len:] *= hann[ramp_len:]
+    
+    return waveform
+
+
 def make_packet_bits(payload_bytes):
     """Build full packet bit stream: preamble + sync + FEC payload."""
     preamble_bits = make_preamble_bits()
@@ -72,15 +100,19 @@ def make_packet_bits(payload_bytes):
     return preamble_bits + sync_bits + payload_bits
 
 
-def make_test_burst(payload, n_packets=20, gap_ms=50):
+def make_test_burst(payload, n_packets=20, gap_ms=50, sps=SPS, fs=FS, ramp_symbols=50):
     """Build a burst of multiple packets with gaps."""
     bits = make_packet_bits(payload)
-    waveform = np.array(bpsk_modulate(bits))
-    gap_samples = int(gap_ms * FS / 1000)
+    waveform = np.array(bpsk_modulate(bits, sps=sps))
+    
+    # Apply burst shaping (Hann ramp)
+    waveform = apply_burst_shaping(waveform, sps=sps, ramp_symbols=ramp_symbols)
+    
+    gap_samples = int(gap_ms * fs / 1000)
 
     fec_len = encode_size_for_payload(len(payload))
     print(f"[EnhancedTX] Payload: {len(payload)}B → FEC: {fec_len}B "
-          f"({len(bits)} packet bits, {len(waveform)/FS*1000:.1f} ms)")
+          f"({len(bits)} packet bits, {len(waveform)/fs*1000:.1f} ms)")
 
     burst = []
     for i in range(n_packets):
@@ -89,7 +121,7 @@ def make_test_burst(payload, n_packets=20, gap_ms=50):
         burst.extend(waveform.tolist())
 
     print(f"[EnhancedTX] Burst: {n_packets} packets, "
-          f"{len(burst)} samples ({len(burst)/FS:.1f}s)")
+          f"{len(burst)} samples ({len(burst)/fs:.1f}s)")
     return burst
 
 
@@ -104,11 +136,16 @@ def main():
     parser.add_argument('--repeat', type=float, default=2.0)
     parser.add_argument('--message', type=str, default='HELLO WORLD')
     parser.add_argument('--n-packets', type=int, default=20)
+    parser.add_argument('--sps', type=int, default=SPS,
+                        help='Samples per symbol (default: %(default)s)')
+    parser.add_argument('--samp-rate', type=float, default=2e6, dest='samp_rate',
+                        help='Sample rate in Hz (default: %(default)s)')
     args = parser.parse_args()
 
-    fs = int(args.samp)
+    fs = int(args.samp_rate)
+    sps = args.sps
     payload = (args.message + '\n').encode('ascii')
-    burst = make_test_burst(payload, n_packets=args.n_packets)
+    burst = make_test_burst(payload, n_packets=args.n_packets, sps=sps, fs=fs)
 
     repeat_gap = max(0, int(args.repeat * fs - len(burst)))
     full_waveform = burst + [0j] * repeat_gap
