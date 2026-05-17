@@ -131,9 +131,13 @@ def scan_frequency(samples, search_width=None, sps=SPS, samp_rate=FS, narrow=Fal
     # RRC filter once, then rotate per candidate
     filt_full = np.convolve(seg, rrc_tmp, 'same')
     
-    # Use evenly-spaced decimation phases, limited to 20 for performance
-    n_phases = min(sps, 20)
-    phase_indices = np.linspace(0, sps - 1, n_phases, dtype=int)
+    # Use only 4 evenly-spaced phases for FO estimation
+    # (process_phase does the full multi-phase decode later)
+    n_phases = min(4, sps)
+    if sps >= 4:
+        phase_indices = np.arange(0, sps, sps // 4, dtype=int)[:4]
+    else:
+        phase_indices = np.arange(sps, dtype=int)
     
     # Determine symbol count per phase
     max_syms = 5000
@@ -455,20 +459,24 @@ class LiveReceiver:
             all_results.extend(
                 process_phase(filtered, phase, fo, sps=self.sps))
 
-        # Deduplicate identical messages from multiple phases
-        seen = set()
+        # Track unique sync positions (same packet detected by multiple
+        # decimation phases should count once; different packets at different
+        # positions count separately). Group by sync_idx rounded to tolerance.
+        position_tolerance = 10  # symbols — groups phase offsets for same packet
+        unique_positions = set()
         found_any = False
-        for r in all_results:
-            msg = r['message']
-            if msg not in seen:
-                seen.add(msg)
-                self.packets_found += 1
-                found_any = True
-                text = msg.decode('ascii', errors='replace')
-                print(f"[EnhancedRX] #{self.packets_found} "
-                      f"FO={r['fo']/1e3:.1f} kHz "
-                      f"({r['polarity']}) "
-                      f"| {text!r}", flush=True)
+        for r in sorted(all_results, key=lambda x: x['sync_idx']):
+            pos_group = r['sync_idx'] // position_tolerance
+            if pos_group in unique_positions:
+                continue  # same packet, different phase
+            unique_positions.add(pos_group)
+            self.packets_found += 1
+            found_any = True
+            text = r['message'].decode('ascii', errors='replace')
+            print(f"[EnhancedRX] #{self.packets_found} "
+                  f"FO={r['fo']/1e3:.1f} kHz "
+                  f"({r['polarity']}) "
+                  f"| {text!r}", flush=True)
         
         if found_any:
             # Update FO tracking with average from multiple phases
@@ -516,7 +524,7 @@ if __name__ == '__main__':
         t = np.arange(len(samples), dtype=np.float64)
         bb = samples * np.exp(-2j * np.pi * fo * t / fs)
         rrc = rcc_taps(sps=sps)
-        filtered = np.convolve(bb.real, rrc, 'same')
+        filtered = np.convolve(bb, rrc, 'same')
 
         seen = set()
         n_phases = min(sps, 20)

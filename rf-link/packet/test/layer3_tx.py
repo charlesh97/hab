@@ -8,7 +8,7 @@ import time
 
 serial = sys.argv[1] if len(sys.argv) > 1 else '000000000000000060a464dc3674640f'
 burst = make_test_burst(b'LAYER3 TEST\n', n_packets=10, sps=20, fs=2000000)
-full_waveform = burst + [0j] * int(5 * 2000000)
+full_waveform = burst + [0j] * int(0.1 * 2000000)
 src = blocks.vector_source_c(full_waveform, True)
 thr = blocks.throttle(gr.sizeof_gr_complex, 2000000)
 sink = soapy.sink(f'driver=hackrf,serial={serial}', 'fc32', 1, '', '', [''], [''])

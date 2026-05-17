@@ -55,7 +55,9 @@ def run_tx(freq, vga, amp, serial, message, n_packets, repeat_sec,
     payload = (message + '\n').encode('ascii')
     burst = make_test_burst(payload, n_packets=n_packets, sps=sps, fs=fs)
 
-    repeat_gap = max(0, int(repeat_sec * fs - len(burst)))
+    # Continuous mode: minimal gap between bursts
+    gap_sec = 0.1  # 100ms gap between burst repeats
+    repeat_gap = max(0, int(gap_sec * fs - len(burst)))
     full_waveform = burst + [0j] * repeat_gap
 
     src = blocks.vector_source_c(full_waveform, True)
