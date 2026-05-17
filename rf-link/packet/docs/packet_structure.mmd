@@ -1,0 +1,19 @@
+block-beta
+  columns 3
+  block:burst:3
+    block:preamble:1
+      columns 1
+      P["Preamble<br/>24 bytes<br/>192 bits"]
+    end
+    block:sync:1
+      columns 1
+      S["Sync Word<br/>4 bytes<br/>0xACDDA4E2"]
+    end
+    block:payload1:1
+      columns 1
+      PLD["FEC Payload<br/>14-1038 bytes<br/>Variable length"]
+    end
+  end
+  style P fill:#4a6fa5,color:#fff
+  style S fill:#2d8a4e,color:#fff
+  style PLD fill:#b35c1e,color:#fff

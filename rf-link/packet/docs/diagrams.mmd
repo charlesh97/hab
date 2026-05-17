@@ -1,0 +1,41 @@
+
+sequenceDiagram
+    participant TX as pkt_enhanced_tx.py
+    participant Codec as packet_codec.py
+    participant FEC as fec_cc.py
+    participant Mod as BPSK Modulator
+    participant Radio as SoapySDR/HackRF
+    participant Air as RF Channel
+    participant RX as pkt_enhanced_rx.py
+    
+    TX->>Codec: packet_encode(payload_bytes)
+    Codec->>Codec: prepend length(2B), append CRC-32(4B)
+    Codec->>FEC: encode_bytes(data, pad_bits=2)
+    FEC-->>Codec: FEC-encoded bytes (rate 1/2, k=7)
+    Codec-->>TX: encoded bytes
+    
+    TX->>TX: build preamble(192b) + sync(32b) + fec bits
+    TX->>Mod: bpsk_modulate(bitstream, SPS, alpha)
+    Mod->>Mod: map bits → BPSK symbols, upsample, RRC filter
+    Mod->>Mod: apply_burst_shaping (Hann ramps)
+    Mod-->>TX: complex waveform
+    
+    TX->>Radio: SoapySDR stream (fc32 samples)
+    Radio->>Air: RF @ 915 MHz
+    Note over Air: 18 km path
+
+    Air->>RX: RF @ fc + drift + fading + noise
+    RX->>RX: digital AGC (normalize RMS)
+    RX->>RX: scan_frequency (FO estimation)
+    RX->>RX: mix to baseband
+    RX->>RX: RRC matched filter
+    RX->>RX: decimate × SPS (try all phases)
+    RX->>RX: sync-word correlation (0xACDDA4E2)
+    RX->>RX: extract FEC symbols
+    RX->>Codec: packet_decode(fec_bytes)
+    Codec->>FEC: decode_bytes_hard (Viterbi)
+    FEC-->>Codec: decoded bits
+    Codec->>Codec: read length, validate CRC
+    Codec-->>RX: payload bytes (or None)
+    RX-->>TX: decoded message printed
+

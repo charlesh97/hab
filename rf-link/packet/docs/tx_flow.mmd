@@ -1,0 +1,17 @@
+flowchart LR
+    IN([payload bytes]) --> ENC["packet_encode()"]
+    ENC --> CRC["Prepend length(2)<br/>Append CRC-32(4)"]
+    CRC --> FEC_ENC["fec_cc.encode_bytes()<br/>Convolutional encode<br/>k=7, r=1/2, terminated"]
+    FEC_ENC --> BITS["Bit stream"]
+    BITS --> FRAME["Build frame:<br/>Preamble(192b) +<br/>Sync(32b) + FEC bits"]
+    FRAME --> MOD["bpsk_modulate()"]
+    MOD --> RRC["RRC pulse shape<br/>(α=0.35, SPS×11 taps)"]
+    RRC --> UPSAMP["Upsample ×SPS"]
+    UPSAMP --> MAP["Bit → BPSK<br/>symbol mapping"]
+    MAP --> SHAPE["apply_burst_shaping()<br/>Hann ramp envelope"]
+    SHAPE --> RADIO["SoapySDR sink<br/>→ HackRF TX"]
+    RADIO --> OUT(((RF Out)))
+
+    style IN fill:#4a6fa5,color:#fff
+    style OUT fill:#4a6fa5,color:#fff
+    style SHAPE fill:#b35c1e,color:#fff

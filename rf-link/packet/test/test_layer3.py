@@ -14,6 +14,10 @@ Usage:
 
   # Auto mode (TX then RX, sequential, same machine):
   python3 test_layer3.py --duration 15 --n-packets 20
+
+  # Variable SPS:
+  python3 test_layer3.py --tx --sps 40 --msg "SLOWER" --n-packets 10
+  python3 test_layer3.py --rx --sps 40 --duration 30
 """
 import sys, os, time, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -41,14 +45,15 @@ def check_hardware():
         return False
 
 
-def run_tx(freq, vga, amp, serial, message, n_packets, repeat_sec):
+def run_tx(freq, vga, amp, serial, message, n_packets, repeat_sec,
+           sps=20, samp_rate=2e6):
     """Run transmitter for N packets, then stop."""
     from pkt_enhanced_tx import make_test_burst
     from gnuradio import gr, blocks, soapy
 
-    fs = 2000000
+    fs = int(samp_rate)
     payload = (message + '\n').encode('ascii')
-    burst = make_test_burst(payload, n_packets=n_packets)
+    burst = make_test_burst(payload, n_packets=n_packets, sps=sps, fs=fs)
 
     repeat_gap = max(0, int(repeat_sec * fs - len(burst)))
     full_waveform = burst + [0j] * repeat_gap
@@ -79,25 +84,41 @@ def run_tx(freq, vga, amp, serial, message, n_packets, repeat_sec):
     print(f"[Layer3 TX] Done.")
 
 
-def run_rx(freq, lna, vga, amp, serial, duration):
+def run_rx(freq, lna, vga, amp, serial, duration,
+           sps=20, samp_rate=2e6, agc_target=0.3):
     """Run receiver for duration seconds, print decoded packets."""
     from pkt_enhanced_rx import LiveReceiver
 
     rx = LiveReceiver(
         freq=freq, lna=lna, vga=vga,
-        amp=amp, serial=serial, duration=duration
+        amp=amp, serial=serial, duration=duration,
+        sps=sps, samp_rate=int(samp_rate), agc_target=agc_target
     )
     rx.run()
     print(f"[Layer3 RX] Total: {rx.packets_found} packets in {duration}s")
 
 
 
-# HackRF serials (detected from hardware enumeration)
-HACKRF_TX_SERIAL = '000000000000000060a464dc3674640f'  # #1 (v2.0.1) — TX
-HACKRF_RX_SERIAL = '000000000000000060a464dc3606610f'  # #0 (2024.02.1) — RX
+# HackRF serials — auto-detect lazily when hardware is available
+def _detect_serials():
+    """Auto-detect HackRF serials from enumerating connected devices."""
+    try:
+        import SoapySDR as _SDR
+        _devices = _SDR.Device.enumerate('driver=hackrf')
+        if len(_devices) >= 2:
+            return (_devices[0].get('serial', ''),
+                    _devices[1].get('serial', ''))
+        elif len(_devices) == 1:
+            s = _devices[0].get('serial', '')
+            return (s, s)
+    except Exception:
+        pass
+    return ('', '')
+
+HACKRF_TX_SERIAL, HACKRF_RX_SERIAL = _detect_serials()
 
 
-def test_cable_loopback():
+def test_cable_loopback(sps=20, samp_rate=2e6, agc_target=0.3):
     """Hardware test: TX → cable → RX, verify at least some packets."""
     if not check_hardware():
         raise RuntimeError("No HackRF found — skipping hardware test")
@@ -112,14 +133,15 @@ def test_cable_loopback():
     from gnuradio import gr, blocks, soapy
     import threading
 
-    fs = 2000000
+    fs = int(samp_rate)
     payload = msg
-    burst = make_test_burst(payload, n_packets=n_packets)
+    burst = make_test_burst(payload, n_packets=n_packets, sps=sps, fs=fs)
     full_waveform = burst + [0j] * int(5 * fs)
 
     # Start RX (use serial to specify device)
     rx = LiveReceiver(freq=freq, lna=16, vga=20, amp=True,
-                      serial=HACKRF_RX_SERIAL, duration=12)
+                      serial=HACKRF_RX_SERIAL, duration=12,
+                      sps=sps, samp_rate=fs, agc_target=agc_target)
 
     rx_thread = threading.Thread(target=rx.run, daemon=True)
     rx_thread.start()
@@ -169,6 +191,12 @@ if __name__ == '__main__':
     parser.add_argument('--duration', type=int, default=15)
     parser.add_argument('--n-packets', type=int, default=50)
     parser.add_argument('--message', type=str, default='HELLO HARDWARE')
+    parser.add_argument('--sps', type=int, default=20,
+                        help='Samples per symbol (default: %(default)s)')
+    parser.add_argument('--samp-rate', type=float, default=2e6, dest='samp_rate',
+                        help='Sample rate in Hz (default: %(default)s)')
+    parser.add_argument('--agc-target', type=float, default=0.3,
+                        help='Digital AGC target RMS (default: %(default)s)')
     args = parser.parse_args()
 
     has = check_hardware()
@@ -176,18 +204,27 @@ if __name__ == '__main__':
         print("Layer 3: No HackRF hardware found. SKIPPED.")
         sys.exit(0)
 
+    sps = args.sps
+    samp_rate = args.samp_rate
+
     if args.tx:
         run_tx(args.freq, args.vga, args.amp, args.serial,
-               args.message, args.n_packets, args.duration)
+               args.message, args.n_packets, args.duration,
+               sps=sps, samp_rate=samp_rate)
     elif args.rx:
         run_rx(args.freq, args.lna, args.vga, args.amp,
-               args.serial, args.duration)
+               args.serial, args.duration,
+               sps=sps, samp_rate=samp_rate, agc_target=args.agc_target)
     else:
         # Automated test mode
         failed = 0
         for name, fn in TESTS:
             try:
-                result = fn()
+                if name == 'cable loopback':
+                    result = fn(sps=sps, samp_rate=samp_rate,
+                                agc_target=args.agc_target)
+                else:
+                    result = fn()
                 print(f"  ✓  {name:<20s}  {result}")
             except Exception as e:
                 print(f"  ✗  {name:<20s}  {e}")

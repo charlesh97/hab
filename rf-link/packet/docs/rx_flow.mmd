@@ -1,0 +1,20 @@
+flowchart LR
+    IN(((RF In))) --> SDR["SoapySDR source<br/>HackRF RX @ fc"]
+    SDR --> AGC["Digital AGC<br/>Normalize RMS → 0.3"]
+    AGC --> FO_EST["scan_frequency()<br/>FO estimation<br/>±20 kHz sweep<br/>Continuous tracking"]
+    FO_EST --> MIX["Mix to baseband<br/>× exp(-j·2π·FO·t)"]
+    MIX --> MFILT["RRC matched filter"]
+    MFILT --> DECIM["Decimate ×SPS<br/>(try all phases 0..SPS-1)"]
+    DECIM --> CORR["Sync-word correlation<br/>0xACDDA4E2<br/>Top N peaks"]
+    CORR --> EXTRACT["Extract FEC symbols<br/>MAX_FEC_SYMS"]
+    EXTRACT --> HD["Hard-decision bits<br/>pack to bytes"]
+    HD --> DEC["packet_decode()"]
+    DEC --> VIT["Viterbi decode<br/>fec_cc.decode_bytes_hard()"]
+    VIT --> LEN["Read length(2)"]
+    LEN --> CRC_CK["Validate CRC-32"]
+    CRC_CK --> OUT([Decoded message or None])
+
+    style IN fill:#4a6fa5,color:#fff
+    style OUT fill:#4a6fa5,color:#fff
+    style AGC fill:#b35c1e,color:#fff
+    style FO_EST fill:#b35c1e,color:#fff

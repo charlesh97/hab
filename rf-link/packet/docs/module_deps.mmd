@@ -1,0 +1,27 @@
+flowchart TD
+    FEC["fec_cc.py<br/>CC Encoder + Viterbi<br/>k=7, r=1/2"] 
+    CODEC["packet_codec.py<br/>CRC-32 + FEC framing<br/>packet_encode/decode"]
+    TX["pkt_enhanced_tx.py<br/>BPSK Transmitter<br/>HackRF via SoapySDR"]
+    RX["pkt_enhanced_rx.py<br/>BPSK Receiver<br/>Sync-word corr + AGC"]
+    
+    TX -->|import| CODEC
+    RX -->|import| CODEC
+    CODEC -->|import| FEC
+
+    subgraph test [Test Suite]
+        L1["test_layer1.py<br/>Codec unit tests"]
+        L2["test_layer2.py<br/>RF loopback"]
+        L3["test_layer3.py<br/>Hardware I/O"]
+    end
+    
+    L1 -.-> CODEC
+    L2 -.-> TX
+    L2 -.-> RX
+
+    style FEC fill:#4a6fa5,color:#fff
+    style CODEC fill:#4a6fa5,color:#fff
+    style TX fill:#b35c1e,color:#fff
+    style RX fill:#b35c1e,color:#fff
+    style L1 fill:#555,color:#ccc
+    style L2 fill:#555,color:#ccc
+    style L3 fill:#555,color:#ccc
