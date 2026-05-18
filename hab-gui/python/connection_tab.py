@@ -1,21 +1,15 @@
+"""Connection Tab — HackRF device discovery and configuration."""
+
 import os
 from datetime import datetime
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QListWidget,
-    QLabel,
-    QLineEdit,
-    QPlainTextEdit,
-    QMessageBox,
-    QGroupBox,
-    QFormLayout,
-    QSlider,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
+    QLabel, QLineEdit, QPlainTextEdit, QMessageBox, QGroupBox,
+    QFormLayout, QSlider,
 )
+from hab_engine.widgets import GlassCard, PrimaryButton, StatusPill
 
 try:
     import SoapySDR
@@ -28,131 +22,156 @@ class ConnectionTab(QWidget):
     def __init__(self, engine=None, parent=None) -> None:
         super().__init__(parent)
         self.engine = engine
-
         self.discovered_devices = []
         self.connected_device = None
 
-        # UI
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(24, 20, 24, 20)
+        main_layout.setSpacing(16)
 
-        # Device discovery section
-        device_group = QGroupBox("HackRF Device")
-        device_layout = QVBoxLayout()
+        # Header
+        header = QLabel("Device Connection")
+        header.setStyleSheet("""
+            font-size: 18px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.87); letter-spacing: -0.3px;
+        """)
+        main_layout.addWidget(header)
 
-        controls_layout = QHBoxLayout()
-        self.btn_refresh = QPushButton("Refresh Devices")
-        self.btn_connect = QPushButton("Connect")
+        # ── Device Discovery Card ──
+        device_card = GlassCard()
+        device_layout = QVBoxLayout(device_card)
+        device_layout.setSpacing(12)
+
+        device_header = QLabel("HACKRF DEVICE")
+        device_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        device_layout.addWidget(device_header)
+
+        controls = QHBoxLayout()
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_connect = PrimaryButton("Connect")
         self.btn_disconnect = QPushButton("Disconnect")
         self.btn_disconnect.setEnabled(False)
-        controls_layout.addWidget(self.btn_refresh)
-        controls_layout.addWidget(self.btn_connect)
-        controls_layout.addWidget(self.btn_disconnect)
-        controls_layout.addStretch(1)
+        controls.addWidget(self.btn_refresh)
+        controls.addWidget(self.btn_connect)
+        controls.addWidget(self.btn_disconnect)
+        controls.addStretch()
+        device_layout.addLayout(controls)
 
         self.device_list = QListWidget()
-        self.device_list.setAlternatingRowColors(True)
-        self.device_list.setMaximumHeight(100)
-
-        device_layout.addLayout(controls_layout)
+        self.device_list.setMinimumHeight(80)
+        self.device_list.setMaximumHeight(120)
         device_layout.addWidget(QLabel("Available Devices:"))
         device_layout.addWidget(self.device_list)
-        device_group.setLayout(device_layout)
+        main_layout.addWidget(device_card)
 
-        # Connection parameters section
-        params_group = QGroupBox("Connection Parameters")
+        # ── Connection Parameters Card ──
+        params_card = GlassCard()
+        params_layout = QVBoxLayout(params_card)
+        params_layout.setSpacing(12)
+
+        params_header = QLabel("RF PARAMETERS")
+        params_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        params_layout.addWidget(params_header)
+
         params_form = QFormLayout()
+        params_form.setSpacing(12)
 
         # Frequency
-        self.input_frequency = QLineEdit()
-        self.input_frequency.setText("434.000")  # MHz
-        self.input_frequency.setPlaceholderText("e.g., 434.000")
-        freq_layout = QHBoxLayout()
-        freq_layout.addWidget(self.input_frequency)
-        freq_layout.addWidget(QLabel("MHz"))
-        params_form.addRow("Frequency:", freq_layout)
+        self.input_frequency = QLineEdit("434.000")
+        freq_row = QHBoxLayout()
+        freq_row.addWidget(self.input_frequency)
+        freq_row.addWidget(QLabel("MHz"))
+        params_form.addRow("Frequency:", freq_row)
 
         # LO ppm
-        self.input_lo_ppm = QLineEdit()
-        self.input_lo_ppm.setText("0")
-        self.input_lo_ppm.setPlaceholderText("e.g., 0")
-        lo_layout = QHBoxLayout()
-        lo_layout.addWidget(self.input_lo_ppm)
-        lo_layout.addWidget(QLabel("ppm"))
-        params_form.addRow("LO ppm:", lo_layout)
+        self.input_lo_ppm = QLineEdit("0")
+        lo_row = QHBoxLayout()
+        lo_row.addWidget(self.input_lo_ppm)
+        lo_row.addWidget(QLabel("ppm"))
+        params_form.addRow("LO ppm:", lo_row)
 
         # Sample rate
-        self.input_sample_rate = QLineEdit()
-        self.input_sample_rate.setText("2.0")  # Msps
-        self.input_sample_rate.setPlaceholderText("e.g., 2.0")
-        sr_layout = QHBoxLayout()
-        sr_layout.addWidget(self.input_sample_rate)
-        sr_layout.addWidget(QLabel("Msps"))
-        params_form.addRow("Sample Rate:", sr_layout)
+        self.input_sample_rate = QLineEdit("2.0")
+        sr_row = QHBoxLayout()
+        sr_row.addWidget(self.input_sample_rate)
+        sr_row.addWidget(QLabel("Msps"))
+        params_form.addRow("Sample Rate:", sr_row)
 
         # LNA Gain
-        lna_layout = QHBoxLayout()
-        self.slider_lna_gain = QSlider(Qt.Horizontal)
-        self.slider_lna_gain.setMinimum(0)
-        self.slider_lna_gain.setMaximum(40)
-        self.slider_lna_gain.setValue(16)
-        self.slider_lna_gain.setTickPosition(QSlider.TicksBelow)
-        self.slider_lna_gain.setTickInterval(8)
-        self.label_lna_gain = QLabel("16 dB")
-        self.slider_lna_gain.valueChanged.connect(
-            lambda v: self.label_lna_gain.setText(f"{v} dB")
+        lna_row = QHBoxLayout()
+        self.slider_lna = QSlider(Qt.Horizontal)
+        self.slider_lna.setMinimum(0)
+        self.slider_lna.setMaximum(40)
+        self.slider_lna.setValue(16)
+        self.slider_lna.setTickPosition(QSlider.TicksBelow)
+        self.slider_lna.setTickInterval(8)
+        self.label_lna = QLabel("16 dB")
+        self.slider_lna.valueChanged.connect(
+            lambda v: self.label_lna.setText(f"{v} dB")
         )
-        lna_layout.addWidget(self.slider_lna_gain)
-        lna_layout.addWidget(self.label_lna_gain)
-        params_form.addRow("LNA Gain:", lna_layout)
+        lna_row.addWidget(self.slider_lna)
+        lna_row.addWidget(self.label_lna)
+        params_form.addRow("LNA Gain:", lna_row)
 
         # VGA Gain
-        vga_layout = QHBoxLayout()
-        self.slider_vga_gain = QSlider(Qt.Horizontal)
-        self.slider_vga_gain.setMinimum(0)
-        self.slider_vga_gain.setMaximum(62)
-        self.slider_vga_gain.setValue(20)
-        self.slider_vga_gain.setTickPosition(QSlider.TicksBelow)
-        self.slider_vga_gain.setTickInterval(10)
-        self.label_vga_gain = QLabel("20 dB")
-        self.slider_vga_gain.valueChanged.connect(
-            lambda v: self.label_vga_gain.setText(f"{v} dB")
+        vga_row = QHBoxLayout()
+        self.slider_vga = QSlider(Qt.Horizontal)
+        self.slider_vga.setMinimum(0)
+        self.slider_vga.setMaximum(62)
+        self.slider_vga.setValue(20)
+        self.slider_vga.setTickPosition(QSlider.TicksBelow)
+        self.slider_vga.setTickInterval(10)
+        self.label_vga = QLabel("20 dB")
+        self.slider_vga.valueChanged.connect(
+            lambda v: self.label_vga.setText(f"{v} dB")
         )
-        vga_layout.addWidget(self.slider_vga_gain)
-        vga_layout.addWidget(self.label_vga_gain)
-        params_form.addRow("VGA Gain:", vga_layout)
+        vga_row.addWidget(self.slider_vga)
+        vga_row.addWidget(self.label_vga)
+        params_form.addRow("VGA Gain:", vga_row)
 
-        # Apply button
-        self.btn_apply_params = QPushButton("Apply Parameters")
-        self.btn_apply_params.setEnabled(False)
-        params_form.addRow(self.btn_apply_params)
+        self.btn_apply = QPushButton("Apply Parameters")
+        self.btn_apply.setEnabled(False)
+        params_form.addRow(self.btn_apply)
+        params_layout.addLayout(params_form)
+        main_layout.addWidget(params_card)
 
-        params_group.setLayout(params_form)
+        # ── Log ──
+        log_card = GlassCard()
+        log_layout = QVBoxLayout(log_card)
+        log_layout.setSpacing(8)
 
-        # Log
+        log_header = QLabel("CONNECTION LOG")
+        log_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        log_layout.addWidget(log_header)
+
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setPlaceholderText("Connection logs will appear here…")
+        self.log.setPlaceholderText("Connection logs will appear here...")
         self.log.setMaximumHeight(150)
+        log_layout.addWidget(self.log)
+        main_layout.addWidget(log_card)
 
-        main_layout.addWidget(device_group)
-        main_layout.addWidget(params_group)
-        main_layout.addWidget(QLabel("Log:"))
-        main_layout.addWidget(self.log)
-        main_layout.addStretch(1)
+        # ── Signals ──
+        self.btn_refresh.clicked.connect(self.refresh_devices)
+        self.btn_connect.clicked.connect(self.connect_device)
+        self.btn_disconnect.clicked.connect(self.disconnect_device)
+        self.btn_apply.clicked.connect(self.apply_params)
 
-        # Signals
-        self.btn_refresh.clicked.connect(self.refresh_devices_clicked)
-        self.btn_connect.clicked.connect(self.connect_clicked)
-        self.btn_disconnect.clicked.connect(self.disconnect_clicked)
-        self.btn_apply_params.clicked.connect(self.apply_params_clicked)
+        # Auto-refresh
+        self.refresh_devices()
 
-        # Auto-refresh on init
-        self.refresh_devices_clicked()
-
-    def append_log(self, message: str) -> None:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log.appendPlainText(f"[{timestamp}] {message}")
-        print(f"[{timestamp}] {message}")
+    def log_msg(self, msg: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log.appendPlainText(f"[{ts}] {msg}")
 
     def selected_device(self):
         idx = self.device_list.currentRow()
@@ -160,166 +179,100 @@ class ConnectionTab(QWidget):
             return self.discovered_devices[idx]
         return None
 
-    def refresh_devices_clicked(self) -> None:
-        """Scan for available HackRF devices"""
+    def refresh_devices(self):
         if not SOAPY_AVAILABLE:
-            self.append_log("ERROR: SoapySDR not installed. Install with: pip install SoapySDR")
+            self.log_msg("SoapySDR not installed")
             return
-            
         try:
-            self.append_log("Scanning for HackRF devices...")
+            self.log_msg("Scanning for HackRF devices...")
             self.device_list.clear()
             self.discovered_devices = []
-
-            # Enumerate HackRF devices
             results = SoapySDR.Device.enumerate("driver=hackrf")
-            
             if not results:
-                self.append_log("No HackRF devices found.")
-                self.append_log("Make sure HackRF is connected and drivers are installed.")
+                self.log_msg("No HackRF devices found")
                 return
-
-            for result in results:
-                self.discovered_devices.append(result)
-                # Convert result to dict and extract fields
-                d = dict(result)
-                label = d.get("label", "")
+            for r in results:
+                self.discovered_devices.append(r)
+                d = dict(r)
+                label = d.get("label", "HackRF")
                 serial = d.get("serial", "unknown")
-                device_name = d.get("device", "")
-                version = d.get("version", "")
-                self.device_list.addItem(f"{label} (Serial: {serial}, Device: {device_name}, Version: {version})")
-            
-            self.append_log(f"Found {len(self.discovered_devices)} HackRF device(s).")
-        except Exception as exc:
-            self.append_log(f"Device scan failed: {exc}")
+                self.device_list.addItem(f"{label}  ·  {serial}")
+            self.log_msg(f"Found {len(results)} device(s)")
+        except Exception as e:
+            self.log_msg(f"Scan failed: {e}")
 
-    def connect_clicked(self) -> None:
-        """Connect to selected HackRF device"""
+    def connect_device(self):
         if not SOAPY_AVAILABLE:
-            self.append_log("ERROR: SoapySDR not installed.")
             return
-            
         device = self.selected_device()
-        if device is None:
-            QMessageBox.information(
-                self, "Connect", "Select a device from the list first."
-            )
+        if not device:
+            QMessageBox.information(self, "Connect", "Select a device first.")
             return
-
         try:
-            if self.connected_device is not None:
+            if self.connected_device:
                 self.connected_device = None
-
-            self.append_log(f"Connecting to {device}...")
-            
-            # Create device instance
+            self.log_msg("Connecting...")
             self.connected_device = SoapySDR.Device(device)
-            
-            self.append_log("Connected successfully.")
+            self.log_msg("Connected")
             self.btn_disconnect.setEnabled(True)
-            self.btn_apply_params.setEnabled(True)
+            self.btn_apply.setEnabled(True)
+            self.apply_params()
 
-            # Notify engine
             if self.engine:
                 from hab_engine.models import DeviceInfo
                 info = DeviceInfo(
                     serial=dict(device).get("serial", "unknown"),
-                    label=dict(device).get("label", "HackRF"),
                     connected=True,
                     frequency=float(self.input_frequency.text()) * 1e6,
                     sample_rate=float(self.input_sample_rate.text()) * 1e6,
                 )
                 self.engine.update_device_state(info)
-            
-            # Apply initial parameters
-            self.apply_params_clicked()
-            
-        except Exception as exc:
-            self.append_log(f"Connection failed: {exc}")
-            self.connected_device = None
+        except Exception as e:
+            self.log_msg(f"Connection failed: {e}")
 
-    def disconnect_clicked(self) -> None:
-        """Disconnect from HackRF device"""
-        if self.connected_device:
-            try:
-                self.connected_device = None
-                self.append_log("Disconnected.")
-            except Exception as exc:
-                self.append_log(f"Disconnect error: {exc}")
+    def disconnect_device(self):
         self.connected_device = None
         self.btn_disconnect.setEnabled(False)
-        self.btn_apply_params.setEnabled(False)
-
+        self.btn_apply.setEnabled(False)
+        self.log_msg("Disconnected")
         if self.engine:
             from hab_engine.models import DeviceInfo
             self.engine.update_device_state(DeviceInfo())
-            self.engine.update_params(
-                frequency=float(self.input_frequency.text()) * 1e6,
-                symbol_rate=float(self.input_sample_rate.text()) * 1e6,
-            )
 
-    def apply_params_clicked(self) -> None:
-        """Apply connection parameters to HackRF"""
+    def apply_params(self):
         if not self.connected_device:
-            QMessageBox.warning(self, "Apply", "Not connected to a device.")
             return
-
         try:
-            # Get parameters
-            freq_mhz = float(self.input_frequency.text())
-            freq_hz = freq_mhz * 1e6
-            
-            sample_rate_msps = float(self.input_sample_rate.text())
-            sample_rate_hz = sample_rate_msps * 1e6
-            
-            lna_gain = self.slider_lna_gain.value()
-            vga_gain = self.slider_vga_gain.value()
+            freq = float(self.input_frequency.text()) * 1e6
+            sr = float(self.input_sample_rate.text()) * 1e6
+            lna = self.slider_lna.value()
+            vga = self.slider_vga.value()
 
-            # Apply to device
-            self.connected_device.setSampleRate(SoapySDR.SOAPY_SDR_RX, 0, sample_rate_hz)
-            self.connected_device.setFrequency(SoapySDR.SOAPY_SDR_RX, 0, freq_hz)
-            
-            # Set gains
-            self.connected_device.setGain(SoapySDR.SOAPY_SDR_RX, 0, "LNA", lna_gain)
-            self.connected_device.setGain(SoapySDR.SOAPY_SDR_RX, 0, "VGA", vga_gain)
+            self.connected_device.setSampleRate(SoapySDR.SOAPY_SDR_RX, 0, sr)
+            self.connected_device.setFrequency(SoapySDR.SOAPY_SDR_RX, 0, freq)
+            self.connected_device.setGain(SoapySDR.SOAPY_SDR_RX, 0, "LNA", lna)
+            self.connected_device.setGain(SoapySDR.SOAPY_SDR_RX, 0, "VGA", vga)
 
-            self.append_log(f"Parameters applied:")
-            self.append_log(f"  Frequency: {freq_mhz} MHz")
-            self.append_log(f"  Sample Rate: {sample_rate_msps} Msps")
-            self.append_log(f"  LNA Gain: {lna_gain} dB")
-            self.append_log(f"  VGA Gain: {vga_gain} dB")
-
-        except ValueError as e:
-            QMessageBox.warning(self, "Invalid Input", f"Invalid parameter value: {e}")
-        except Exception as exc:
-            self.append_log(f"Failed to apply parameters: {exc}")
+            self.log_msg(f"Applied: {freq/1e6} MHz, {sr/1e6} Msps, LNA={lna}, VGA={vga}")
+        except Exception as e:
+            self.log_msg(f"Apply failed: {e}")
 
     def get_connection_params(self) -> dict:
-        """Get current connection parameters"""
         return {
             "frequency": float(self.input_frequency.text()) * 1e6,
             "sample_rate": float(self.input_sample_rate.text()) * 1e6,
-            "lna_gain": self.slider_lna_gain.value(),
-            "vga_gain": self.slider_vga_gain.value(),
+            "lna_gain": self.slider_lna.value(),
+            "vga_gain": self.slider_vga.value(),
             "lo_ppm": int(self.input_lo_ppm.text()),
         }
-    
+
     def is_device_connected(self) -> bool:
-        """Check if a device is currently connected"""
         return self.connected_device is not None
-    
+
     def get_connected_device(self):
-        """Get the connected device object"""
         return self.connected_device
-    
+
     def get_device_args(self) -> dict:
-        """Get SoapySDR device arguments for the connected device"""
         if self.connected_device is None:
             return None
-        
-        device = self.selected_device()
-        if device is None:
-            return None
-        
-        return device
-
+        return self.selected_device()

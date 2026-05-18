@@ -1,25 +1,15 @@
+"""DVBS-2 TX Tab — cinematic video transmission controls."""
+
 import os
-import threading
-import time
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QLineEdit,
-    QPlainTextEdit,
-    QMessageBox,
-    QGroupBox,
-    QFormLayout,
-    QFileDialog,
-    QSplitter,
-    QCheckBox,
-    QSlider,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QLineEdit, QPlainTextEdit, QMessageBox, QGroupBox,
+    QFormLayout, QFileDialog, QSplitter, QCheckBox, QSlider,
 )
+from hab_engine.widgets import GlassCard, PrimaryButton, MetricTile, Divider
 
 try:
     import pyqtgraph as pg
@@ -30,9 +20,8 @@ except ImportError:
 
 
 class DVBS2TXTab(QWidget):
-    """DVBS-2 video transmission tab with HabEngine integration."""
+    """DVBS-2 video transmission tab with cinematic styling."""
 
-    # Signal for thread-safe debug output
     debug_message = Signal(str, str)
 
     def __init__(self, connection_tab, engine=None, parent=None) -> None:
@@ -41,106 +30,102 @@ class DVBS2TXTab(QWidget):
         self.engine = engine
         self.selected_file = None
         self.tsfifo_path = "/tmp/tsfifo"
+        self._current_spectrum = None
 
-        # Debug output signal connection
-        self.debug_message.connect(self._append_debug_to_terminal)
+        self.debug_message.connect(self._append_debug)
 
-        # Setup spectrum callback from engine
         if self.engine:
             self.engine.set_spectrum_callback(self._on_engine_spectrum)
             self.engine.set_pipeline_debug_callback(self._on_pipeline_debug)
 
-        # Spectrum display state
-        self._current_spectrum = None
-
         self._setup_ui()
 
     def _on_engine_spectrum(self, frame):
-        """Receive spectrum data from engine (called from background thread)."""
         self._current_spectrum = frame
 
-    def _on_pipeline_debug(self, process_name: str, message: str):
-        """Receive pipeline debug output from engine."""
-        self.debug_message.emit(process_name, message)
+    def _on_pipeline_debug(self, name: str, msg: str):
+        self.debug_message.emit(name, msg)
 
     def _setup_ui(self):
-        """Build the UI."""
-        main_layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
         # Header
         header = QLabel("DVBS-2 Transmitter")
-        header.setAlignment(Qt.AlignLeft)
-        header.setStyleSheet("font-size: 18px; font-weight: 600;")
-        main_layout.addWidget(header)
+        header.setStyleSheet("""
+            font-size: 18px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.87); letter-spacing: -0.3px;
+        """)
+        layout.addWidget(header)
 
-        # ── Input File Section ──
-        file_group = QGroupBox("Input File")
-        file_layout = QFormLayout()
-        file_input_layout = QHBoxLayout()
+        # ── Input File Row ──
+        file_card = GlassCard()
+        file_row = QHBoxLayout(file_card)
+        file_row.setSpacing(12)
+
+        file_label = QLabel("INPUT FILE")
+        file_label.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        file_row.addWidget(file_label)
+
         self.file_path_display = QLineEdit()
         self.file_path_display.setReadOnly(True)
-        self.file_path_display.setPlaceholderText("No file selected")
-        self.btn_browse_file = QPushButton("Browse...")
-        file_input_layout.addWidget(self.file_path_display)
-        file_input_layout.addWidget(self.btn_browse_file)
-        file_layout.addRow("MP4 File:", file_input_layout)
-        file_group.setLayout(file_layout)
-        main_layout.addWidget(file_group)
+        self.file_path_display.setPlaceholderText("No file selected...")
+        file_row.addWidget(self.file_path_display, 1)
 
-        # ── Pipeline Control Section ──
-        pipeline_group = QGroupBox("Pipeline Control")
-        pipeline_layout = QVBoxLayout()
-        pipeline_btn_layout = QHBoxLayout()
-        self.btn_start_pipeline = QPushButton("Start Pipeline")
-        self.btn_stop_pipeline = QPushButton("Stop Pipeline")
-        self.btn_stop_pipeline.setEnabled(False)
-        self.pipeline_status_label = QLabel("Status: Stopped")
-        self.pipeline_status_label.setStyleSheet("color: red; font-weight: 600;")
-        pipeline_btn_layout.addWidget(self.btn_start_pipeline)
-        pipeline_btn_layout.addWidget(self.btn_stop_pipeline)
-        pipeline_btn_layout.addStretch()
-        pipeline_btn_layout.addWidget(self.pipeline_status_label)
-        pipeline_layout.addLayout(pipeline_btn_layout)
+        self.btn_browse = QPushButton("Browse")
+        file_row.addWidget(self.btn_browse)
+        layout.addWidget(file_card)
 
-        # Debug terminals (side by side)
-        debug_terminals_layout = QHBoxLayout()
-        ffmpeg_widget = QWidget()
-        ffmpeg_layout = QVBoxLayout(ffmpeg_widget)
-        ffmpeg_layout.setContentsMargins(5, 5, 5, 5)
-        ffmpeg_label = QLabel("ffmpeg Output:")
-        ffmpeg_label.setStyleSheet("font-weight: 600;")
-        self.debug_terminal_ffmpeg = QPlainTextEdit()
-        self.debug_terminal_ffmpeg.setReadOnly(True)
-        self.debug_terminal_ffmpeg.setPlaceholderText("ffmpeg output will appear here...")
-        self.debug_terminal_ffmpeg.setMaximumBlockCount(500)
-        ffmpeg_layout.addWidget(ffmpeg_label)
-        ffmpeg_layout.addWidget(self.debug_terminal_ffmpeg)
+        # ── Pipeline + TX Controls ──
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(16)
 
-        tsp_widget = QWidget()
-        tsp_layout = QVBoxLayout(tsp_widget)
-        tsp_layout.setContentsMargins(5, 5, 5, 5)
-        tsp_label = QLabel("tsp Output:")
-        tsp_label.setStyleSheet("font-weight: 600;")
-        self.debug_terminal_tsp = QPlainTextEdit()
-        self.debug_terminal_tsp.setReadOnly(True)
-        self.debug_terminal_tsp.setPlaceholderText("tsp output will appear here...")
-        self.debug_terminal_tsp.setMaximumBlockCount(500)
-        tsp_layout.addWidget(tsp_label)
-        tsp_layout.addWidget(self.debug_terminal_tsp)
+        # Pipeline section
+        pipeline_card = GlassCard()
+        pipeline_inner = QVBoxLayout(pipeline_card)
+        pipeline_inner.setSpacing(8)
 
-        debug_terminals_layout.addWidget(ffmpeg_widget)
-        debug_terminals_layout.addWidget(tsp_widget)
-        pipeline_layout.addLayout(debug_terminals_layout)
-        pipeline_group.setLayout(pipeline_layout)
-        main_layout.addWidget(pipeline_group)
+        pipe_header = QLabel("PIPELINE")
+        pipe_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        pipeline_inner.addWidget(pipe_header)
 
-        # ── Transmission Control Section ──
-        tx_group = QGroupBox("Transmission Control")
-        tx_layout = QVBoxLayout()
+        pipe_buttons = QHBoxLayout()
+        self.btn_start_pipe = PrimaryButton("▶ Pipeline")
+        self.btn_stop_pipe = QPushButton("■ Stop")
+        self.btn_stop_pipe.setEnabled(False)
+        pipe_buttons.addWidget(self.btn_start_pipe)
+        pipe_buttons.addWidget(self.btn_stop_pipe)
+        pipeline_inner.addLayout(pipe_buttons)
 
-        # TX params row
-        tx_params_layout = QHBoxLayout()
-        tx_params_layout.addWidget(QLabel("VGA Gain:"))
+        self.pipe_status = QLabel("Status: Stopped")
+        self.pipe_status.setStyleSheet("""
+            font-size: 11px; color: rgba(255, 255, 255, 0.50);
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        """)
+        pipeline_inner.addWidget(self.pipe_status)
+        controls_layout.addWidget(pipeline_card, 1)
+
+        # TX section
+        tx_card = GlassCard()
+        tx_inner = QVBoxLayout(tx_card)
+        tx_inner.setSpacing(8)
+
+        tx_header = QLabel("TRANSMISSION")
+        tx_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        tx_inner.addWidget(tx_header)
+
+        tx_params = QHBoxLayout()
+        tx_params.addWidget(QLabel("VGA:"))
         self.tx_gain_slider = QSlider(Qt.Horizontal)
         self.tx_gain_slider.setMinimum(0)
         self.tx_gain_slider.setMaximum(47)
@@ -151,110 +136,153 @@ class DVBS2TXTab(QWidget):
         self.tx_gain_slider.valueChanged.connect(
             lambda v: self.tx_gain_label.setText(f"{v} dB")
         )
-        tx_params_layout.addWidget(self.tx_gain_slider)
-        tx_params_layout.addWidget(self.tx_gain_label)
+        tx_params.addWidget(self.tx_gain_slider)
+        tx_params.addWidget(self.tx_gain_label)
+        self.tx_amp = QCheckBox("AMP")
+        tx_params.addWidget(self.tx_amp)
+        tx_inner.addLayout(tx_params)
 
-        self.tx_amp_check = QCheckBox("AMP (14dB)")
-        self.tx_amp_check.setChecked(False)
-        tx_params_layout.addWidget(self.tx_amp_check)
-        tx_params_layout.addStretch()
-        tx_layout.addLayout(tx_params_layout)
-
-        tx_btn_layout = QHBoxLayout()
-        self.btn_start_tx = QPushButton("Start TX")
-        self.btn_stop_tx = QPushButton("Stop TX")
+        tx_buttons = QHBoxLayout()
+        self.btn_start_tx = PrimaryButton("▶ Start TX")
+        self.btn_stop_tx = QPushButton("■ Stop TX")
         self.btn_stop_tx.setEnabled(False)
-        self.tx_status_label = QLabel("Status: Stopped")
-        self.tx_status_label.setStyleSheet("color: red; font-weight: 600;")
-        tx_btn_layout.addWidget(self.btn_start_tx)
-        tx_btn_layout.addWidget(self.btn_stop_tx)
-        tx_btn_layout.addStretch()
-        tx_btn_layout.addWidget(self.tx_status_label)
-        tx_layout.addLayout(tx_btn_layout)
-        tx_group.setLayout(tx_layout)
-        main_layout.addWidget(tx_group)
+        tx_buttons.addWidget(self.btn_start_tx)
+        tx_buttons.addWidget(self.btn_stop_tx)
+        tx_inner.addLayout(tx_buttons)
 
-        # ── Spectrum Visualization ──
-        splitter = QSplitter(Qt.Vertical)
-        spectrum_widget = QWidget()
-        spectrum_layout = QVBoxLayout(spectrum_widget)
-        spectrum_layout.setContentsMargins(0, 0, 0, 0)
-        spectrum_header = QLabel("Spectrum Visualization")
-        spectrum_header.setStyleSheet("font-weight: 600;")
-        spectrum_layout.addWidget(spectrum_header)
+        self.tx_status = QLabel("Status: Stopped")
+        self.tx_status.setStyleSheet("""
+            font-size: 11px; color: rgba(255, 255, 255, 0.50);
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        """)
+        tx_inner.addWidget(self.tx_status)
+        controls_layout.addWidget(tx_card, 1)
 
+        layout.addLayout(controls_layout)
+
+        # ── Debug Terminals ──
+        debug_card = GlassCard()
+        debug_inner = QVBoxLayout(debug_card)
+        debug_inner.setSpacing(8)
+
+        debug_header = QLabel("PIPELINE OUTPUT")
+        debug_header.setStyleSheet("""
+            font-size: 10px; font-weight: 700;
+            color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+        """)
+        debug_inner.addWidget(debug_header)
+
+        debug_split = QHBoxLayout()
+        debug_split.setSpacing(12)
+
+        # ffmpeg
+        ffmpeg_box = QVBoxLayout()
+        ffmpeg_label = QLabel("ffmpeg")
+        ffmpeg_label.setStyleSheet("""
+            font-size: 11px; font-weight: 600;
+            color: rgba(255, 255, 255, 0.60);
+        """)
+        ffmpeg_box.addWidget(ffmpeg_label)
+        self.debug_ffmpeg = QPlainTextEdit()
+        self.debug_ffmpeg.setReadOnly(True)
+        self.debug_ffmpeg.setPlaceholderText("ffmpeg output...")
+        self.debug_ffmpeg.setMaximumBlockCount(200)
+        ffmpeg_box.addWidget(self.debug_ffmpeg)
+        debug_split.addLayout(ffmpeg_box)
+
+        # tsp
+        tsp_box = QVBoxLayout()
+        tsp_label = QLabel("tsp")
+        tsp_label.setStyleSheet("""
+            font-size: 11px; font-weight: 600;
+            color: rgba(255, 255, 255, 0.60);
+        """)
+        tsp_box.addWidget(tsp_label)
+        self.debug_tsp = QPlainTextEdit()
+        self.debug_tsp.setReadOnly(True)
+        self.debug_tsp.setPlaceholderText("tsp output...")
+        self.debug_tsp.setMaximumBlockCount(200)
+        tsp_box.addWidget(self.debug_tsp)
+        debug_split.addLayout(tsp_box)
+
+        debug_inner.addLayout(debug_split)
+        layout.addWidget(debug_card)
+
+        # ── Spectrum ──
         if PYQTGRAPH_AVAILABLE:
-            pg.setConfigOption('background', (35, 35, 35))
+            pg.setConfigOption('background', (10, 10, 11))
             pg.setConfigOption('foreground', 'w')
+
+            spectrum_card = GlassCard()
+            spec_layout = QVBoxLayout(spectrum_card)
+            spec_layout.setSpacing(8)
+
+            spec_header = QLabel("SPECTRUM")
+            spec_header.setStyleSheet("""
+                font-size: 10px; font-weight: 700;
+                color: rgba(255, 255, 255, 0.40); letter-spacing: 1.5px;
+            """)
+            spec_layout.addWidget(spec_header)
+
             self.spectrum_plot = pg.PlotWidget()
             self.spectrum_plot.setLabel('left', 'Power', units='dB')
             self.spectrum_plot.setLabel('bottom', 'Frequency', units='Hz')
             self.spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
-            self.spectrum_plot.setMinimumHeight(150)
+            self.spectrum_plot.setMinimumHeight(180)
             self.spectrum_curve = self.spectrum_plot.plot(
-                pen=pg.mkPen(color=(42, 130, 218), width=1)
+                pen=pg.mkPen(color=(249, 115, 22), width=1.5)
             )
-            spectrum_layout.addWidget(self.spectrum_plot)
+            spec_layout.addWidget(self.spectrum_plot, 1)
 
             # Waterfall
-            self.waterfall_plot = pg.ImageView()
-            self.waterfall_plot.setMinimumHeight(200)
-            self.waterfall_plot.view.invertY(True)
-            spectrum_layout.addWidget(self.waterfall_plot)
-            self.waterfall_data = np.zeros((200, 1024))
-            self.waterfall_row_index = 0
-        else:
-            no_graph = QLabel("PyQtGraph not installed. pip install pyqtgraph")
-            no_graph.setMinimumHeight(300)
-            no_graph.setAlignment(Qt.AlignCenter)
-            no_graph.setStyleSheet("background-color: #232323; color: white;")
-            spectrum_layout.addWidget(no_graph)
+            self.waterfall = pg.ImageView()
+            self.waterfall.setMinimumHeight(180)
+            self.waterfall.view.invertY(True)
+            spec_layout.addWidget(self.waterfall, 1)
 
-        splitter.addWidget(spectrum_widget)
-        splitter.setStretchFactor(0, 1)
-        main_layout.addWidget(splitter)
+            self.waterfall_data = np.zeros((200, 1024))
+            self.waterfall_row = 0
+            layout.addWidget(spectrum_card, 1)
+        else:
+            no_graph = QLabel("PyQtGraph not installed")
+            no_graph.setAlignment(Qt.AlignCenter)
+            no_graph.setStyleSheet("background: rgba(255,255,255,0.02); border-radius: 16px; padding: 40px; color: rgba(255,255,255,0.4);")
+            no_graph.setMinimumHeight(200)
+            layout.addWidget(no_graph)
+
+        layout.addStretch()
 
         # ── Connect signals ──
-        self.btn_browse_file.clicked.connect(self._browse_file)
-        self.btn_start_pipeline.clicked.connect(self._start_pipeline)
-        self.btn_stop_pipeline.clicked.connect(self._stop_pipeline)
+        self.btn_browse.clicked.connect(self._browse)
+        self.btn_start_pipe.clicked.connect(self._start_pipeline)
+        self.btn_stop_pipe.clicked.connect(self._stop_pipeline)
         self.btn_start_tx.clicked.connect(self._start_tx)
         self.btn_stop_tx.clicked.connect(self._stop_tx)
 
-        # Spectrum update timer (20 Hz)
         self.spectrum_timer = QTimer()
         self.spectrum_timer.timeout.connect(self._update_spectrum)
         self.spectrum_timer.setInterval(50)
 
-    # ── Debug Output ──
+    def _append_debug(self, name: str, msg: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        formatted = f"[{ts}] {msg}"
+        if name == "ffmpeg":
+            self.debug_ffmpeg.appendPlainText(formatted)
+        elif name == "tsp":
+            self.debug_tsp.appendPlainText(formatted)
 
-    def _append_debug_to_terminal(self, process_name: str, message: str):
-        """Append message to the appropriate debug terminal."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        formatted = f"[{timestamp}] {message}"
-        if process_name == "ffmpeg":
-            self.debug_terminal_ffmpeg.appendPlainText(formatted)
-        elif process_name == "tsp":
-            self.debug_terminal_tsp.appendPlainText(formatted)
-        print(formatted)
+    def _log(self, msg: str):
+        self._append_debug("ffmpeg", msg)
+        self._append_debug("tsp", msg)
 
-    def _log(self, message: str):
-        """Log to both terminals."""
-        self._append_debug_to_terminal("ffmpeg", message)
-        self._append_debug_to_terminal("tsp", message)
-
-    # ── File Selection ──
-
-    def _browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(
+    def _browse(self):
+        path, _ = QFileDialog.getOpenFileName(
             self, "Select MP4 File", "", "MP4 Files (*.mp4);;All Files (*)"
         )
-        if file_path:
-            self.selected_file = file_path
-            self.file_path_display.setText(file_path)
-            self._log(f"Selected file: {file_path}")
-
-    # ── Pipeline Control ──
+        if path:
+            self.selected_file = path
+            self.file_path_display.setText(path)
+            self._log(f"File: {path}")
 
     def _start_pipeline(self):
         if not self.selected_file:
@@ -263,72 +291,55 @@ class DVBS2TXTab(QWidget):
         if not os.path.exists(self.selected_file):
             QMessageBox.warning(self, "Not Found", "File does not exist.")
             return
-
-        if self.engine:
-            success = self.engine.start_pipeline(self.selected_file)
-            if success:
-                self.btn_start_pipeline.setEnabled(False)
-                self.btn_stop_pipeline.setEnabled(True)
-                self.pipeline_status_label.setText("Status: Running")
-                self.pipeline_status_label.setStyleSheet("color: green; font-weight: 600;")
-                self._log("Pipeline started via HabEngine")
-            else:
-                QMessageBox.critical(self, "Error", "Failed to start pipeline.")
+        if self.engine and self.engine.start_pipeline(self.selected_file):
+            self.btn_start_pipe.setEnabled(False)
+            self.btn_stop_pipe.setEnabled(True)
+            self.pipe_status.setText("Status: Running • encoding")
+            self.pipe_status.setStyleSheet("font-size: 11px; color: #10b981; font-family: 'JetBrains Mono', 'SF Mono', monospace;")
+            self._log("Pipeline started")
         else:
-            QMessageBox.warning(self, "No Engine", "Engine not initialized.")
+            QMessageBox.critical(self, "Error", "Failed to start pipeline.")
 
     def _stop_pipeline(self):
         if self.engine:
             self.engine.stop_pipeline()
-        self.btn_start_pipeline.setEnabled(True)
-        self.btn_stop_pipeline.setEnabled(False)
-        self.pipeline_status_label.setText("Status: Stopped")
-        self.pipeline_status_label.setStyleSheet("color: red; font-weight: 600;")
+        self.btn_start_pipe.setEnabled(True)
+        self.btn_stop_pipe.setEnabled(False)
+        self.pipe_status.setText("Status: Stopped")
+        self.pipe_status.setStyleSheet("font-size: 11px; color: rgba(255, 255, 255, 0.50); font-family: 'JetBrains Mono', 'SF Mono', monospace;")
         self._log("Pipeline stopped")
-
-    # ── TX Control ──
 
     def _start_tx(self):
         if not self.connection_tab.is_device_connected():
             QMessageBox.warning(self, "No Device", "Connect a HackRF first.")
             return
-
         device = self.connection_tab.get_device_args()
-        if device is None:
+        if not device:
             QMessageBox.warning(self, "No Device", "Could not get device info.")
             return
 
         params = self.connection_tab.get_connection_params()
         freq = params["frequency"]
 
-        # Update engine params
         if self.engine:
-            self.engine.update_params(
-                frequency=freq,
-                symbol_rate=1e6,
-            )
+            self.engine.update_params(frequency=freq, symbol_rate=1e6)
             self.engine.flowgraph.update_config(
                 center_freq=freq,
                 tx_gain_vga=float(self.tx_gain_slider.value()),
-                tx_gain_amp=self.tx_amp_check.isChecked(),
+                tx_gain_amp=self.tx_amp.isChecked(),
             )
-
-            # Build device args string from selected device
             dev = self.connection_tab.selected_device()
-            device_args = f"driver=hackrf,serial={dict(dev).get('serial', '')}" if dev else "driver=hackrf"
+            args = f"driver=hackrf,serial={dict(dev).get('serial', '')}" if dev else "driver=hackrf"
 
-            success = self.engine.start_tx(device_args=device_args)
-            if success:
-                self._log(f"TX started: {freq/1e6:.3f} MHz, VGA={self.tx_gain_slider.value()} dB, AMP={self.tx_amp_check.isChecked()}")
+            if self.engine.start_tx(device_args=args):
+                self._log(f"TX: {freq/1e6:.3f} MHz, VGA={self.tx_gain_slider.value()} dB")
                 self.btn_start_tx.setEnabled(False)
                 self.btn_stop_tx.setEnabled(True)
-                self.tx_status_label.setText("Status: Transmitting")
-                self.tx_status_label.setStyleSheet("color: green; font-weight: 600;")
+                self.tx_status.setText("Status: Transmitting")
+                self.tx_status.setStyleSheet("font-size: 11px; color: #f97316; font-family: 'JetBrains Mono', 'SF Mono', monospace;")
                 self.spectrum_timer.start()
-            else:
-                QMessageBox.critical(self, "TX Error", "Failed to start transmission.")
-        else:
-            QMessageBox.warning(self, "No Engine", "Engine not initialized.")
+                return
+        QMessageBox.critical(self, "TX Error", "Failed to start transmission.")
 
     def _stop_tx(self):
         if self.engine:
@@ -336,36 +347,27 @@ class DVBS2TXTab(QWidget):
         self.spectrum_timer.stop()
         self.btn_start_tx.setEnabled(True)
         self.btn_stop_tx.setEnabled(False)
-        self.tx_status_label.setText("Status: Stopped")
-        self.tx_status_label.setStyleSheet("color: red; font-weight: 600;")
+        self.tx_status.setText("Status: Stopped")
+        self.tx_status.setStyleSheet("font-size: 11px; color: rgba(255, 255, 255, 0.50); font-family: 'JetBrains Mono', 'SF Mono', monospace;")
         self._log("TX stopped")
 
-    # ── Spectrum Display ──
-
     def _update_spectrum(self):
-        """Update spectrum plots from engine data."""
         if not PYQTGRAPH_AVAILABLE:
             return
         frame = self._current_spectrum
         if frame is None:
             return
-
         try:
             freq = np.array(frame.frequencies)
             power = np.array(frame.power_db)
-
-            # Frequency plot
             self.spectrum_curve.setData(freq, power)
-
-            # Waterfall
             if self.waterfall_data.shape[1] >= len(power):
-                self.waterfall_data[self.waterfall_row_index, :len(power)] = power[:self.waterfall_data.shape[1]]
-                self.waterfall_row_index = (self.waterfall_row_index + 1) % 200
-                self.waterfall_plot.setImage(self.waterfall_data, autoLevels=True)
-        except Exception as e:
-            print(f"Spectrum update error: {e}")
+                self.waterfall_data[self.waterfall_row, :len(power)] = power[:self.waterfall_data.shape[1]]
+                self.waterfall_row = (self.waterfall_row + 1) % 200
+                self.waterfall.setImage(self.waterfall_data, autoLevels=True)
+        except Exception:
+            pass
 
     def cleanup(self):
-        """Clean up when tab is closed."""
         self._stop_tx()
         self._stop_pipeline()
