@@ -53,18 +53,18 @@ interface StatTileProps {
 }
 export function StatTile({ label, value, unit, trend, icon }: StatTileProps) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col justify-between">
-      <div className="flex items-center justify-between text-slate-500 mb-1">
+    <div className="bg-[rgba(18,20,22,0.6)] border border-white/5 rounded-lg p-3 flex flex-col justify-between">
+      <div className="flex items-center justify-between text-slate-400 mb-1">
         <span className="text-[10px] font-bold uppercase tracking-widest">
           {label}
         </span>
-        {icon && <div className="text-slate-400">{icon}</div>}
+        {icon && <div className="text-slate-500">{icon}</div>}
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-mono font-bold text-slate-800">
+        <span className="text-2xl font-mono font-bold text-white">
           {value}
         </span>
-        <span className="text-xs font-mono text-slate-500">{unit}</span>
+        <span className="text-xs font-mono text-slate-400">{unit}</span>
       </div>
     </div>);
 

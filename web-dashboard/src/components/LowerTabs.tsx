@@ -6,14 +6,16 @@ import { RfConfig } from './RfConfig';
 import { DataStream } from './DataStream';
 interface LowerTabsProps {
   packets: Packet[];
+  sendCommand?: (cmd: string, data?: any) => void;
+  engineStatus?: any;
 }
 type TabId = 'video' | 'rf' | 'data';
-export function LowerTabs({ packets }: LowerTabsProps) {
+export function LowerTabs({ packets, sendCommand, engineStatus }: LowerTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('video');
   return (
-    <div className="flex-1 flex flex-col bg-white overflow-hidden">
+    <div className="flex flex-col bg-[rgba(18,20,22,0.6)] overflow-hidden">
       {/* Tab Header */}
-      <div className="flex border-b border-slate-200 bg-slate-50 shrink-0">
+      <div className="flex border-b border-white/5 bg-[rgba(18,20,22,0.8)] shrink-0">
         <TabButton
           id="video"
           label="Video Feeds"
@@ -38,9 +40,9 @@ export function LowerTabs({ packets }: LowerTabsProps) {
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="min-h-[400px] max-h-[600px] overflow-y-auto relative">
         {activeTab === 'video' && <VideoFeeds />}
-        {activeTab === 'rf' && <RfConfig />}
+        {activeTab === 'rf' && <RfConfig sendCommand={sendCommand} engineStatus={engineStatus} />}
         {activeTab === 'data' && <DataStream packets={packets} />}
       </div>
     </div>);
@@ -62,7 +64,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors border-b-2 ${isActive ? 'border-sky-600 text-sky-700 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}>
+      className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors border-b-2 ${isActive ? 'border-sky-500 text-sky-400 bg-[rgba(18,20,22,0.6)]' : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
       
       {icon}
       {label}

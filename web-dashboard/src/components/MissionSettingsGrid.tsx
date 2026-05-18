@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { ArrowUpRightIcon } from 'lucide-react';
 interface MissionSettingsGridProps {
   className?: string;
+  onTileClick?: (label: string) => void;
 }
 export function MissionSettingsGrid({
-  className = ''
+  className = '',
+  onTileClick
 }: MissionSettingsGridProps) {
+  const [activeTiles, setActiveTiles] = useState<Set<string>>(new Set(['Recover']));
+
+  const handleTileClick = useCallback((label: string) => {
+    setActiveTiles(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+    onTileClick?.(label);
+  }, [onTileClick]);
   return (
     <div
       className={`bg-white/[0.02] border border-white/10 rounded-3xl p-5 flex flex-col ${className}`}>
@@ -27,14 +43,14 @@ export function MissionSettingsGrid({
 
       {/* Grid */}
       <div className="grid grid-cols-4 grid-rows-2 gap-3 flex-1">
-        <Tile label="Beacon" svg={<BeaconSVG />} />
-        <Tile label="Predict" svg={<PredictSVG />} />
-        <Tile label="Recover" svg={<RecoverSVG />} isActive />
-        <Tile label="Terrain" svg={<TerrainSVG />} />
-        <Tile label="Track" svg={<TrackSVG />} />
-        <Tile label="Analyze" svg={<AnalyzeSVG />} />
-        <Tile label="Cutdown" svg={<CutdownSVG />} />
-        <Tile label="Telemetry" svg={<TelemetrySVG />} />
+        <Tile label="Beacon" svg={<BeaconSVG />} isActive={activeTiles.has('Beacon')} onClick={() => handleTileClick('Beacon')} />
+        <Tile label="Predict" svg={<PredictSVG />} isActive={activeTiles.has('Predict')} onClick={() => handleTileClick('Predict')} />
+        <Tile label="Recover" svg={<RecoverSVG />} isActive={activeTiles.has('Recover')} onClick={() => handleTileClick('Recover')} />
+        <Tile label="Terrain" svg={<TerrainSVG />} isActive={activeTiles.has('Terrain')} onClick={() => handleTileClick('Terrain')} />
+        <Tile label="Track" svg={<TrackSVG />} isActive={activeTiles.has('Track')} onClick={() => handleTileClick('Track')} />
+        <Tile label="Analyze" svg={<AnalyzeSVG />} isActive={activeTiles.has('Analyze')} onClick={() => handleTileClick('Analyze')} />
+        <Tile label="Cutdown" svg={<CutdownSVG />} isActive={activeTiles.has('Cutdown')} onClick={() => handleTileClick('Cutdown')} />
+        <Tile label="Telemetry" svg={<TelemetrySVG />} isActive={activeTiles.has('Telemetry')} onClick={() => handleTileClick('Telemetry')} />
       </div>
     </div>);
 
@@ -42,14 +58,19 @@ export function MissionSettingsGrid({
 function Tile({
   label,
   svg,
-  isActive = false
+  isActive = false,
+  onClick
 
 
 
 
-}: {label: string;svg: React.ReactNode;isActive?: boolean;}) {
+}: {label: string;svg: React.ReactNode;isActive?: boolean;onClick?: () => void;}) {
   return (
     <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
       className={`relative rounded-2xl p-3 flex flex-col overflow-hidden group cursor-pointer transition-all duration-300 ${isActive ? 'bg-orange-500/10 border border-orange-500/30 shadow-[inset_0_0_20px_rgba(249,115,22,0.1)]' : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10'}`}>
       
       <span

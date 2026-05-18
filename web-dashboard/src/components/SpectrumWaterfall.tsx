@@ -63,7 +63,7 @@ export function SpectrumWaterfall({ spectrumData, height = 200 }: SpectrumWaterf
 
     // Add to waterfall buffer
     waterfallRef.current.push(rowData);
-    if (waterfallRef.current > maxLines) {
+    if (waterfallRef.current.length > maxLines) {
       waterfallRef.current = waterfallRef.current.slice(-maxLines);
     }
 

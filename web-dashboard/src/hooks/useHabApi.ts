@@ -61,6 +61,14 @@ export function useHabApi() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const packetIdRef = useRef(0);
+  const currentRef = useRef(current);
+  const lastPacketTimeRef = useRef(Date.now());
+  const [packetsReceiving, setPacketsReceiving] = useState(false);
+
+  // Keep currentRef in sync
+  useEffect(() => {
+    currentRef.current = current;
+  });
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
@@ -88,7 +96,7 @@ export function useHabApi() {
               // Simulate telemetry sample from engine status
               const sample: TelemetrySample = {
                 timestamp: Date.now(),
-                altitude: 18500 + Math.sin(Date.now() / 10000) * 5000,
+                altitude: 20000 + Math.sin(Date.now() / 5000) * 10000,
                 verticalSpeed: 4.8 + (Math.random() - 0.5) * 2,
                 groundSpeed: 22.5 + (Math.random() - 0.5) * 3,
                 heading: 85 + (Math.random() - 0.5) * 5,
@@ -109,6 +117,7 @@ export function useHabApi() {
               setSpectrum(msg.data);
             } else if (msg.type === 'telemetry') {
               packetIdRef.current += 1;
+              lastPacketTimeRef.current = Date.now();
               const pkt: Packet = {
                 id: `PKT-${packetIdRef.current}`,
                 timestamp: Date.now(),
@@ -167,25 +176,73 @@ export function useHabApi() {
     }).catch(() => {});
   }, []);
 
-  // Fetch spectrum periodically
+  // Spectrum via SSE with HTTP polling fallback
   useEffect(() => {
-    if (!connected) return;
-    const interval = setInterval(async () => {
+    let eventSource: EventSource | null = null;
+    let pollingInterval: ReturnType<typeof setInterval> | null = null;
+    let isDisposed = false;
+
+    function startPolling() {
+      pollingInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/spectrum`);
+          const data = await res.json();
+          if (data && data.power_db) {
+            setSpectrum({
+              f: data.frequencies || [],
+              p: data.power_db || [],
+              fc: data.center_freq || 915e6,
+              span: data.span_hz || 2e6,
+            });
+          }
+        } catch {}
+      }, 200);
+    }
+
+    function startSSE() {
+      if (isDisposed) return;
       try {
-        const res = await fetch(`${API_BASE}/spectrum`);
-        const data = await res.json();
-        if (data && data.power_db) {
-          setSpectrum({
-            f: data.frequencies || [],
-            p: data.power_db || [],
-            fc: data.center_freq || 915e6,
-            span: data.span_hz || 2e6,
-          });
-        }
-      } catch {}
-    }, 200); // 5Hz spectrum updates
-    return () => clearInterval(interval);
-  }, [connected]);
+        const es = new EventSource(`${API_BASE}/spectrum/live`);
+
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.power_db) {
+              setSpectrum({
+                f: data.frequencies || [],
+                p: data.power_db || [],
+                fc: data.center_freq || 915e6,
+                span: data.span_hz || 2e6,
+              });
+            }
+          } catch (e) {
+            console.warn('[HAB] SSE parse error:', e);
+          }
+        };
+
+        es.onerror = () => {
+          es.close();
+          eventSource = null;
+          // Fallback to HTTP polling on SSE failure
+          if (!isDisposed) {
+            startPolling();
+          }
+        };
+
+        eventSource = es;
+      } catch (e) {
+        if (!isDisposed) startPolling();
+      }
+    }
+
+    startSSE();
+
+    return () => {
+      isDisposed = true;
+      if (eventSource) eventSource.close();
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, []);
 
   // Fetch telemetry periodically
   useEffect(() => {
@@ -206,6 +263,67 @@ export function useHabApi() {
     return () => clearInterval(interval);
   }, [connected]);
 
+  // Simulated packet generation (1-3 second intervals)
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const types = ['TELEMETRY', 'TELEMETRY', 'TELEMETRY', 'TELEMETRY',
+                   'TELEMETRY', 'TELEMETRY', 'TELEMETRY', 'TELEMETRY',
+                   'EVENT', 'WARNING'] as const;
+
+    function generatePacket() {
+      const c = currentRef.current;
+      const type = types[Math.floor(Math.random() * types.length)];
+      const sats = c.gpsSats;
+
+      let payload: string;
+      if (type === 'TELEMETRY') {
+        payload = `[TLM] A:${c.altitude.toFixed(0)}m V:${c.verticalSpeed.toFixed(1)}m/s T:${c.externalTemp.toFixed(1)}°C P:${c.pressure.toFixed(1)}hPa GPS:${sats}`;
+      } else if (type === 'EVENT') {
+        const events = ['STATUS_UPDATE_NOMINAL', 'GPS_FIX_ACQUIRED',
+                        'BEACON_TRANSMITTED', 'PAYLOAD_HEALTHY'];
+        payload = `[EVT] ${events[Math.floor(Math.random() * events.length)]} SATS:${sats}`;
+      } else {
+        const warnings = ['BATTERY_LOW', 'TEMP_HIGH', 'PRESSURE_DROP'];
+        const battVal = c.battery.toFixed(1);
+        payload = `[WRN] ${warnings[Math.floor(Math.random() * warnings.length)]} ${battVal}%`;
+      }
+
+      const id = Array.from({length: 8}, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+
+      const pkt: Packet = {
+        id,
+        timestamp: Date.now(),
+        type,
+        payload,
+      };
+
+      lastPacketTimeRef.current = Date.now();
+      setPackets((prev) => {
+        const next = [...prev, pkt];
+        return next.length > 200 ? next.slice(next.length - 200) : next;
+      });
+
+      const delay = 1000 + Math.random() * 2000;
+      timeout = setTimeout(generatePacket, delay);
+    }
+
+    const initialDelay = 1000 + Math.random() * 2000;
+    timeout = setTimeout(generatePacket, initialDelay);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // Detect active packet reception
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - lastPacketTimeRef.current;
+      setPacketsReceiving(elapsed < 2500);
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
   return {
     connected,
     phase,
@@ -213,6 +331,7 @@ export function useHabApi() {
     current,
     history,
     packets,
+    packetsReceiving,
     linkStatus,
     engineStatus,
     spectrum,

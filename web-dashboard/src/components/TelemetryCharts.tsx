@@ -26,11 +26,11 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
     intTemp: Number(h.internalTemp.toFixed(1))
   }));
   return (
-    <div className="flex flex-col gap-4 p-4 bg-white border-b border-slate-200 shrink-0 h-64">
+    <div className="flex flex-col gap-4 p-4 bg-[rgba(18,20,22,0.6)] shrink-0 h-64">
       <div className="flex-1 flex gap-4">
         {/* Altitude Chart */}
-        <div className="flex-1 border border-slate-100 rounded-lg p-2 bg-slate-50/50">
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 pl-2">
+        <div className="flex-1 border border-white/5 rounded-lg p-2 bg-[rgba(18,20,22,0.3)]">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-2">
             Altitude Profile
           </div>
           <div className="h-[calc(100%-24px)] w-full">
@@ -53,7 +53,7 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#e2e8f0" />
+                  stroke="rgba(255,255,255,0.05)" />
                 
                 <XAxis
                   dataKey="time"
@@ -61,7 +61,7 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     fontSize: 10,
                     fontFamily: 'JetBrains Mono'
                   }}
-                  stroke="#94a3b8"
+                  stroke="#64748b"
                   minTickGap={30} />
                 
                 <YAxis
@@ -69,18 +69,18 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     fontSize: 10,
                     fontFamily: 'JetBrains Mono'
                   }}
-                  stroke="#94a3b8" />
+                  stroke="#64748b" />
                 
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#fff',
+                    backgroundColor: '#1e293b',
                     borderRadius: '8px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid rgba(255,255,255,0.1)',
                     fontSize: '12px',
                     fontFamily: 'JetBrains Mono'
                   }}
                   labelStyle={{
-                    color: '#64748b',
+                    color: '#94a3b8',
                     marginBottom: '4px'
                   }} />
                 
@@ -99,9 +99,9 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
         </div>
 
         {/* Temperature Chart */}
-        <div className="flex-1 border border-slate-100 rounded-lg p-2 bg-slate-50/50">
+        <div className="flex-1 border border-white/5 rounded-lg p-2 bg-[rgba(18,20,22,0.3)]">
           <div className="flex justify-between items-center mb-2 pl-2 pr-2">
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Thermal
             </div>
             <div className="flex gap-3 text-[9px] font-bold uppercase">
@@ -123,7 +123,7 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#e2e8f0" />
+                  stroke="rgba(255,255,255,0.05)" />
                 
                 <XAxis
                   dataKey="time"
@@ -131,7 +131,7 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     fontSize: 10,
                     fontFamily: 'JetBrains Mono'
                   }}
-                  stroke="#94a3b8"
+                  stroke="#64748b"
                   minTickGap={30} />
                 
                 <YAxis
@@ -139,15 +139,16 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     fontSize: 10,
                     fontFamily: 'JetBrains Mono'
                   }}
-                  stroke="#94a3b8" />
+                  stroke="#64748b" />
                 
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#fff',
+                    backgroundColor: '#1e293b',
                     borderRadius: '8px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid rgba(255,255,255,0.1)',
                     fontSize: '12px',
-                    fontFamily: 'JetBrains Mono'
+                    fontFamily: 'JetBrains Mono',
+                    color: '#e2e8f0'
                   }} />
                 
                 <Line

@@ -16,7 +16,7 @@ interface TelemetryGridProps {
 }
 export function TelemetryGrid({ current }: TelemetryGridProps) {
   return (
-    <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+    <div className="grid grid-cols-3 gap-3 p-4 bg-[rgba(18,20,22,0.6)] shrink-0">
       <StatTile
         label="Altitude"
         value={current.altitude.toFixed(0)}

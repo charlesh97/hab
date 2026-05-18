@@ -9,8 +9,18 @@ import {
 'lucide-react';
 interface HeroStageProps {
   current: TelemetrySample;
+  engineStatus?: {
+    running: boolean;
+    tx_active: boolean;
+    device_connected: boolean;
+    frequency: number;
+    symbol_rate: number;
+    uptime_sec: number;
+    pipeline: { running: boolean; file_path: string; bitrate: number } | null;
+  } | null;
+  connected?: boolean;
 }
-export function HeroStage({ current }: HeroStageProps) {
+export function HeroStage({ current, engineStatus, connected }: HeroStageProps) {
   return (
     <div className="flex-1 relative overflow-hidden">
       {/* Background Image */}
@@ -26,12 +36,22 @@ export function HeroStage({ current }: HeroStageProps) {
 
       {/* Top Left Status Pill */}
       <div className="absolute top-24 left-8 flex items-center gap-3 bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-full pl-2 pr-5 py-2 shadow-lg">
-        <div className="bg-emerald-500/20 rounded-full p-1">
-          <CheckCircle2Icon className="w-4 h-4 text-emerald-400" />
+        <div className={`rounded-full p-1 ${connected ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
+          <CheckCircle2Icon className={`w-4 h-4 ${connected ? 'text-emerald-400' : 'text-rose-400'}`} />
         </div>
-        <span className="text-white/70 text-xs font-light tracking-wide">
-          Telemetry link nominal
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-white/70 text-xs font-light tracking-wide">
+            Telemetry link {connected ? 'nominal' : 'offline'}
+          </span>
+          {engineStatus && (
+            <>
+              <span className="text-white/20">|</span>
+              <span className={`text-[10px] font-mono ${engineStatus.running ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>
+                ENG:{engineStatus.running ? 'ON' : 'OFF'}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Right Edge Controls */}

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
 interface RfConfigProps {
-  sendCommand: (cmd: string, data?: any) => void;
+  sendCommand?: (cmd: string, data?: any) => void;
   engineStatus?: any;
 }
 
-export function RfConfig({ sendCommand, engineStatus }: RfConfigProps) {
+export function RfConfig({ sendCommand = () => {}, engineStatus }: RfConfigProps) {
   const [freq, setFreq] = useState('915.000');
   const [vga, setVga] = useState('16');
   const [amp, setAmp] = useState(false);

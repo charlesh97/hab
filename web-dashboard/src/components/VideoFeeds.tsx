@@ -2,7 +2,7 @@ import React from 'react';
 import { SignalIcon, VideoIcon } from 'lucide-react';
 export function VideoFeeds() {
   return (
-    <div className="p-4 h-full overflow-y-auto space-y-4 bg-slate-50">
+    <div className="p-4 overflow-y-auto space-y-4 bg-[rgba(18,20,22,0.6)]">
       <VideoPlayer title="ONBOARD CAM" bitrate="2.4 Mbps" signal="98%" />
       <VideoPlayer title="CHASE VEHICLE" bitrate="1.8 Mbps" signal="85%" />
     </div>);
@@ -18,7 +18,7 @@ function VideoPlayer({
 
 }: {title: string;bitrate: string;signal: string;}) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-[rgba(18,20,22,0.8)] border border-white/5 rounded-lg overflow-hidden">
       {/* Video Placeholder */}
       <div className="aspect-video bg-slate-900 relative flex items-center justify-center">
         <VideoIcon className="w-12 h-12 text-slate-700" />
@@ -43,13 +43,13 @@ function VideoPlayer({
       </div>
 
       {/* Controls */}
-      <div className="p-3 border-t border-slate-100 flex gap-2">
+      <div className="p-3 border-t border-white/5 flex gap-2">
         <input
           type="text"
           defaultValue="rtsp://hab-1.local/stream1"
-          className="flex-1 bg-slate-50 border border-slate-200 rounded text-xs font-mono px-2 py-1.5 text-slate-600 focus:outline-none focus:border-sky-500" />
+          className="flex-1 bg-[rgba(18,20,22,0.6)] border border-white/5 rounded text-xs font-mono px-2 py-1.5 text-slate-300 focus:outline-none focus:border-sky-500 placeholder:text-slate-600" />
         
-        <button className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded transition-colors">
+        <button className="bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5 rounded transition-colors">
           Reconnect
         </button>
       </div>
