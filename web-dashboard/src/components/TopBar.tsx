@@ -1,11 +1,22 @@
 import React from 'react';
 import { FlightPhase } from '../types';
 import { ChevronDownIcon, CrosshairIcon, SunIcon } from 'lucide-react';
+
 interface TopBarProps {
   phase: FlightPhase;
   missionTime: number;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
-export function TopBar({ phase, missionTime }: TopBarProps) {
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'telemetry', label: 'Telemetry' },
+  { id: 'map', label: 'Map' },
+  { id: 'settings', label: 'Settings' },
+];
+
+export function TopBar({ phase, missionTime, activeTab, onTabChange }: TopBarProps) {
   return (
     <header className="absolute top-0 left-0 w-full h-20 px-8 flex items-center justify-between z-50">
       {/* Left: Logo & Brand */}
@@ -20,11 +31,14 @@ export function TopBar({ phase, missionTime }: TopBarProps) {
 
       {/* Center: Pill Navigation */}
       <nav className="flex items-center gap-2 bg-white/[0.02] backdrop-blur-xl border border-white/10 rounded-full p-1.5 shadow-2xl">
-        <NavPill label="Overview" isActive={false} />
-        <NavPill label="Missions" isActive={true} />
-        <NavPill label="Telemetry" isActive={false} />
-        <NavPill label="Map" isActive={false} />
-        <NavPill label="Settings" isActive={false} />
+        {TABS.map((tab) => (
+          <NavPill
+            key={tab.id}
+            label={tab.label}
+            isActive={activeTab === tab.id}
+            onClick={() => onTabChange(tab.id)}
+          />
+        ))}
       </nav>
 
       {/* Right: Mission ID & Status */}
@@ -48,15 +62,21 @@ export function TopBar({ phase, missionTime }: TopBarProps) {
           </span>
         </div>
       </div>
-    </header>);
-
+    </header>
+  );
 }
-function NavPill({ label, isActive }: {label: string;isActive: boolean;}) {
+
+function NavPill({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
   return (
     <button
-      className={`px-6 py-2 rounded-full text-xs font-light tracking-wide transition-all duration-300 ${isActive ? 'bg-white/10 text-white border border-white/10 shadow-[inset_0_0_10px_rgba(255,255,255,0.05)]' : 'text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent'}`}>
-      
+      onClick={onClick}
+      className={`px-6 py-2 rounded-full text-xs font-light tracking-wide transition-all duration-300 ${
+        isActive
+          ? 'bg-white/10 text-white border border-white/10 shadow-[inset_0_0_10px_rgba(255,255,255,0.05)]'
+          : 'text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent'
+      }`}
+    >
       {label}
-    </button>);
-
+    </button>
+  );
 }

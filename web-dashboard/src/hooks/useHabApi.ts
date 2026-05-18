@@ -3,7 +3,7 @@
  * Replaces the simulated useFlightSimulation hook with real WebSocket data.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TelemetrySample, FlightPhase, Packet, LinkStatus } from '../types';
 
 interface SpectrumFrame {
@@ -28,7 +28,8 @@ interface WsMessage {
   data: any;
 }
 
-const WS_URL = `ws://${window.location.hostname}:8765`;
+const WS_URL = `ws://${window.location.hostname}:3000/ws`;
+const API_BASE = `http://${window.location.hostname}:3000/api`;
 
 export function useHabApi() {
   const [connected, setConnected] = useState(false);
@@ -158,7 +159,52 @@ export function useHabApi() {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ command, data: data || {} }));
     }
+    // Also send via HTTP POST as fallback
+    fetch(`${API_BASE}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command, data: data || {} }),
+    }).catch(() => {});
   }, []);
+
+  // Fetch spectrum periodically
+  useEffect(() => {
+    if (!connected) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/spectrum`);
+        const data = await res.json();
+        if (data && data.power_db) {
+          setSpectrum({
+            f: data.frequencies || [],
+            p: data.power_db || [],
+            fc: data.center_freq || 915e6,
+            span: data.span_hz || 2e6,
+          });
+        }
+      } catch {}
+    }, 200); // 5Hz spectrum updates
+    return () => clearInterval(interval);
+  }, [connected]);
+
+  // Fetch telemetry periodically
+  useEffect(() => {
+    if (!connected) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/telemetry/latest`);
+        const data = await res.json();
+        if (data && data.altitude !== undefined) {
+          setCurrent(data);
+          setHistory((prev) => {
+            const next = [...prev, data];
+            return next.length > 120 ? next.slice(1) : next;
+          });
+        }
+      } catch {}
+    }, 1000); // 1Hz telemetry
+    return () => clearInterval(interval);
+  }, [connected]);
 
   return {
     connected,
