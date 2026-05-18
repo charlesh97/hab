@@ -10,17 +10,20 @@ from PySide6.QtWidgets import (
 )
 
 
-class GlassCard(QFrame):
-    """A glassmorphism-styled card with rounded corners and subtle border."""
+from hab_engine.styles import BG_CARD, BORDER_CARD
 
-    def __init__(self, parent=None):
+class GlassCard(QFrame):
+    """A frosted-glass card matching the STRATOS reference design.
+    Dark opaque base with subtle border, simulating backdrop-filter blur.
+    """
+
+    def __init__(self, parent=None, radius="16px"):
         super().__init__(parent)
         self.setStyleSheet(f"""
             GlassCard {{
-                background-color: rgba(255, 255, 255, 0.02);
-                border: 1px solid rgba(255, 255, 255, 0.10);
-                border-radius: 16px;
-                padding: 16px;
+                background-color: {BG_CARD};
+                border: 1px solid {BORDER_CARD};
+                border-radius: {radius};
             }}
         """)
         # Don't create a layout here - let callers manage it

@@ -14,7 +14,7 @@ logging.basicConfig(
 from telemetry_tab import TelemetryTab
 from connection_tab import ConnectionTab
 from dvbs2_tx_tab import DVBS2TXTab
-from dashboard_tab import DashboardTab
+from dashboard_tab import CinematicDashboardTab as DashboardTab
 from hab_engine import HabEngine
 from hab_engine.styles import main_stylesheet, BG_PRIMARY
 from hab_engine.widgets import TopBar
@@ -56,6 +56,11 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.telemetry_tab, "Telemetry")
         self.tabs.addTab(self.connection_tab, "Connection")
         self.tabs.addTab(self.dvbs2_tx_tab, "DVBS-2 TX")
+        # Default to first tab; switch by passing --tab N on command line
+        import sys
+        if "--tab" in sys.argv:
+            idx = int(sys.argv[sys.argv.index("--tab") + 1])
+            self.tabs.setCurrentIndex(idx)
 
         root_layout.addWidget(self.tabs)
         self.setCentralWidget(root)
