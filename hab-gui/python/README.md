@@ -1,131 +1,196 @@
-# HAB GUI
+# HAB Ground Station — User Guide
 
-A PySide6 desktop application for a High Altitude Balloon ground station.
+A professional ground station application for high-altitude balloon (HAB) DVB-S2 video transmission and telemetry reception.
 
-**Features:**
-- Dark theme with modern Fusion dark palette
-- HackRF SDR integration via SoapySDR
-- GNU Radio signal processing pipeline
-- Telemetry reception and display
-- Spectrum analyzer
-- Real-time frequency and gain control
+## Architecture
 
-## Setup
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Python Backend (HabEngine)               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
+│  │ DVBS2 TX │  │ Pipeline │  │ WebSocket Server     │  │
+│  │ Flowgraph│  │ (ffmpeg  │  │ ws://localhost:8765   │  │
+│  │ via SDR  │  │  → tsp)  │  │                      │  │
+│  └──────────┘  └──────────┘  └──────────────────────┘  │
+│         │            │                │                 │
+│         └─────┬──────┘                │                 │
+│               │                       │                 │
+│         ┌─────▼─────┐                 │                 │
+│         │ HabEngine  │  (singleton)   │                 │
+│         └─────┬─────┘                 │                 │
+│               │                       │                 │
+│         ┌─────▼──────┐                │                 │
+│         │ PySide6 GUI │               │                 │
+│         │ (Operator)  │               │                 │
+│         └────────────┘                │                 │
+└───────────────────────────────────────┼─────────────────┘
+                                        │
+                              ┌─────────▼────────┐
+                              │  macOS Dashboard  │
+                              │  (SwiftUI)        │
+                              └──────────────────┘
+```
 
-This project requires system-level installation of GNU Radio and SoapySDR before installing Python packages.
+## Quick Start
 
-### Prerequisites (macOS)
-
-Install system dependencies via Homebrew:
+### 1. Setup Environment
 
 ```bash
-# Install SoapySDR, HackRF support, and GNU Radio
-brew install soapysdr soapyhackrf hackrf gnuradio
+cd ~/Documents/git/hab/rf-link
+source setup_env.sh
 ```
 
-### Python Environment
+This activates the venv and configures GNU Radio paths.
 
-**IMPORTANT:** GNU Radio and SoapySDR are installed system-wide by Homebrew. Your virtual environment needs access to these system packages.
-
-Create virtual environment with `--system-site-packages` flag:
+### 2. Launch GUI
 
 ```bash
-# Create venv with system site packages access (REQUIRED for GNU Radio)
-python3 -m venv .venv --system-site-packages
-
-# Activate venv
-source .venv/bin/activate
-
-# Upgrade pip and install Python packages
-pip install --upgrade pip
-pip install -r requirements.txt
+cd ~/Documents/git/hab/hab-gui/python
+./launch.sh
 ```
 
-**Why `--system-site-packages`?**
+Three tabs:
 
-This flag allows your virtual environment to import packages installed system-wide (outside the venv). Since GNU Radio and SoapySDR are installed via Homebrew in the system's Python library path, this flag is **essential** for the application to find and use these libraries. Without it, you'll get `ModuleNotFoundError: No module named 'gnuradio'`.
+| Tab | Purpose |
+|-----|---------|
+| **Connection** | Discover and connect to HackRF devices, set frequency/gain |
+| **DVBS-2 TX** | Select MP4 file, start encoding pipeline, transmit via SDR |
+| **Telemetry** | Spectrum analyzer and packet telemetry display |
 
-### Alternative: Use Conda (Recommended for SDR projects)
-
-Conda simplifies SDR dependency management since GNU Radio and SoapySDR are available via conda-forge:
+### 3. Over-the-Air Test
 
 ```bash
-conda create -n hab-gui python=3.10
-conda activate hab-gui
-conda install -c conda-forge gnuradio soapysdr
-pip install -r requirements.txt
+cd ~/Documents/git/hab/hab-gui/python
+bash test_ota.sh
 ```
 
-**Note:** With Conda, you don't need the `--system-site-packages` flag because Conda manages all dependencies within the conda environment itself.
+This runs: file-to-file loopback → OTA TX/RX → TS verification → WebSocket test.
 
-### OS-specific notes
+### 4. macOS Dashboard
 
-- **macOS:** GNU Radio and SoapySDR must be installed via Homebrew first
-- **Linux:** Install packages via apt: `sudo apt-get install gnuradio python3-gnuradio soapysdr soapysdr-module-hackrf`
-- **Windows:** Use pre-built GNU Radio binaries from gnuradio.org
-
-## Run
+Open the Xcode project and run:
 
 ```bash
-python main.py
+open ~/Documents/git/hab/hab-gui/macos/Balloon\ Dashboard.xcodeproj
 ```
 
-## Using the Application
+Build and run. Connect to `ws://localhost:8765`.
 
-### Connection Tab
+## OTA Workflow
 
-1. **Refresh Devices:** Click "Refresh Devices" to scan for available HackRF hardware
-2. **Connect:** Select a device and click "Connect" to establish USB connection
-3. **Configure Parameters:**
-   - Set frequency (MHz)
-   - Adjust sample rate
-   - Set LO ppm correction
-   - Configure LNA and VGA gains
-4. **Apply:** Click "Apply Parameters" to update the HackRF settings
-5. **Disconnect:** Click "Disconnect" when finished
+### Transmitter (HackRF #0 — serial ...60661)
+```
+Source File (MP4) 
+    → ffmpeg (encode to MPEG-TS at 965 kbps)
+    → tsp (rate regulate to 965326 bps)
+    → /tmp/tsfifo (named pipe)
+    → GNU Radio DVBS2 flowgraph (QPSK 1/2, pilots on)
+    → SoapySDR → HackRF TX at 915 MHz (ISM band)
+```
 
-### Telemetry Tab
+### Receiver (HackRF #1 — serial ...67464)
+```
+HackRF RX at 915 MHz
+    → SoapySDR source
+    → GNU Radio dvbs2rx demodulator
+    → MPEG-TS output (file or UDP)
+    → ffplay or VLC to view
+```
 
-1. **Start RX:** Click "Start RX" to begin receiving telemetry data
-2. **View Data:** Telemetry packets appear in the terminal display
-3. **Export:** Use "Export CSV" button to save telemetry data (future feature)
-4. **Stop RX:** Click "Stop RX" to stop reception
+### Bitrate Calculation
 
-### Troubleshooting
+For QPSK 1/2 at 1 Msym/s with pilots ON:
+- Transport stream bitrate: **965,326 bps**
+- Video budget: ~700 kbps (H.264)
+- Audio budget: ~128 kbps (MP2)
+- Remaining: ~137 kbps for overhead/headers
 
-**GNU Radio not found:**
-- Ensure GNU Radio is installed: `brew list gnuradio`
-- Check if accessible from venv: `python -c "import gnuradio"`
-- **This error occurs if your venv was created without `--system-site-packages`**
-- Solution: Recreate venv with the flag:
-  ```bash
-  deactivate
-  rm -rf .venv
-  python3 -m venv .venv --system-site-packages
-  source .venv/bin/activate
-  pip install -r requirements.txt
-  ```
+## Available Commands
 
-**HackRF not detected:**
-- Plug in HackRF via USB
-- Test with command line: `hackrf_info`
-- Check USB cable quality (use USB 2.0 port)
+### CLI Tools (rf-link/dvbs2/)
 
-**SoapySDR errors:**
-- Verify installation: `SoapySDRUtil --info`
-- Check modules: `SoapySDRUtil --modules` (should show hackrf)
-- Reinstall if needed: `brew reinstall soapyhackrf`
+```bash
+# File-to-file test
+python3 dvbs2/tx.py --source file --in-file input.ts \
+  --sink file --out-file output.iq --sym-rate 1e6 --modcod QPSK1/2
 
-## Project Structure
+# Over-the-air TX
+python3 dvbs2/tx.py --source file --in-file video.ts \
+  --sink hackrf --hackrf-vga 16 --hackrf-amp \
+  --hackrf-serial 'SERIAL' --freq 915e6 --sym-rate 1e6
+
+# Over-the-air RX
+python3 dvbs2/rx.py --source hackrf --hackrf-serial 'SERIAL' \
+  --hackrf-lna 8 --hackrf-vga 24 --hackrf-amp \
+  --sink file --out-file rx.ts --freq 915e6 --sym-rate 1e6
+```
+
+### GUI
+
+```bash
+# Launch full app
+./launch.sh
+
+# Run tests
+python3 test_engine.py
+
+# Full OTA test
+bash test_ota.sh
+```
+
+## Development
+
+### Project Structure
 
 ```
-hab-gui/
-├── main.py                  # Application entry point
-├── connection_tab.py         # HackRF device connection tab
-├── telemetry_tab.py          # Telemetry display and control tab
-├── telemetry_rx.py           # GNU Radio signal processing
-├── requirements.txt          # Python dependencies
-├── README.md                 # This file
-├── REFACTORING_SUMMARY.md    # Detailed refactoring notes
-└── SPECTRUM_ANALYZER.md      # Spectrum analyzer implementation guide
+hab/
+├── rf-link/
+│   ├── dvbs2/              # CLI DVB-S2 tools
+│   │   ├── tx.py           # Transmitter (HackRF/USRP/BladeRF)
+│   │   ├── rx.py           # Receiver (HackRF/RTL-SDR/USRP)
+│   │   └── flowgraph.py    # GRC-generated flowgraph
+│   ├── packet/             # Packet telemetry (FSK/GMSK)
+│   ├── gr-dvbs2rx/         # GNU Radio OOT module (BUILT)
+│   ├── dtv-utils-master/   # dvbs2rate utility (COMPILED)
+│   ├── setup_env.sh        # Environment setup
+│   └── venv/               # Python venv
+├── hab-gui/
+│   ├── python/
+│   │   ├── main.py         # GUI entry point
+│   │   ├── connection_tab.py
+│   │   ├── dvbs2_tx_tab.py
+│   │   ├── dvbs2_flowgraph.py  # Embedded flowgraph (FIXED)
+│   │   ├── telemetry_tab.py
+│   │   ├── telemetry_rx.py
+│   │   ├── hab_engine/     # Core engine package ★
+│   │   │   ├── engine.py           # HabEngine singleton
+│   │   │   ├── flowgraph_manager.py
+│   │   │   ├── pipeline_manager.py
+│   │   │   ├── websocket_server.py # WS server :8765
+│   │   │   └── models.py           # Data models
+│   │   ├── launch.sh       # One-command launcher
+│   │   ├── test_engine.py  # 25 integration tests
+│   │   └── test_ota.sh     # OTA test suite
+│   └── macos/
+│       └── Balloon Dashboard/  # Xcode SwiftUI app
+└── docs/
+    └── ARCHITECTURE.md
 ```
+
+### Adding Features
+
+1. **Engine**: Modify `hab_engine/engine.py`
+2. **Flowgraph**: Modify `dvbs2_flowgraph.py` (GNU Radio)
+3. **GUI Tab**: Create new tab file, add to `main.py`
+4. **macOS**: Add SwiftUI views, connect via WebSocket
+
+## Troubleshooting
+
+| Issue | Likely Fix |
+|-------|-----------|
+| "No module named 'gnuradio'" | Run `source rf-link/setup_env.sh` |
+| HackRF not found | Check USB, run `hackrf_info` |
+| No carrier lock | Increase TX gain, check antennas, verify frequency matches |
+| High FER | Decrease symbol rate, increase TX power |
+| GUI won't render | Needs macOS with display — `ssh -X` or run locally |
+| WebSocket connection refused | Ensure Python GUI is running (launch.sh) |

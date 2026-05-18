@@ -13,9 +13,10 @@ struct Balloon_DashboardApp: App {
         WindowGroup {
             ContentView()
         }
-        .defaultSize(width: 2000, height: 1400)
+        .defaultSize(width: 1600, height: 1000)
+        .windowResizability(.contentMinSize)
         .commands {
-            // Allow window resizing
+            CommandGroup(replacing: .newItem) { }
         }
     }
 }

@@ -1,47 +1,55 @@
 import sys
+import logging
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QTabWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QListWidget,
-    QLabel,
-    QLineEdit,
-    QFileDialog,
-    QPlainTextEdit,
-    QMessageBox,
-    QGroupBox,
-    QFormLayout,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
 )
 
 from telemetry_tab import TelemetryTab
 from connection_tab import ConnectionTab
 from dvbs2_tx_tab import DVBS2TXTab
+from dashboard_tab import DashboardTab
+from hab_engine import HabEngine
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("HAB Ground Station")
-        self.resize(1000, 700)
+        self.resize(1200, 800)
+
+        # Initialize the engine (singleton)
+        self.engine = HabEngine(enable_websocket=True)
 
         tabs = QTabWidget()
         
-        # Create tabs in order: Telemetry, Connection, DVBS-2 TX
-        # Connection tab must be created before DVBS-2 TX tab
-        telemetry_tab = TelemetryTab()
-        connection_tab = ConnectionTab()
-        dvbs2_tx_tab = DVBS2TXTab(connection_tab)
+        # Create tabs, pass engine reference
+        self.dashboard_tab = DashboardTab(self.engine)
+        self.connection_tab = ConnectionTab(self.engine)
+        self.telemetry_tab = TelemetryTab(self.engine)
+        self.dvbs2_tx_tab = DVBS2TXTab(self.connection_tab, self.engine)
         
-        tabs.addTab(telemetry_tab, "Telemetry")
-        tabs.addTab(connection_tab, "Connection")
-        tabs.addTab(dvbs2_tx_tab, "DVBS-2 TX")
+        tabs.addTab(self.dashboard_tab, "Dashboard")
+        tabs.addTab(self.telemetry_tab, "Telemetry")
+        tabs.addTab(self.connection_tab, "Connection")
+        tabs.addTab(self.dvbs2_tx_tab, "DVBS-2 TX")
         
         self.setCentralWidget(tabs)
+        self.setWindowTitle("HAB Ground Station v0.1")
+
+    def closeEvent(self, event):
+        """Clean up on close."""
+        self.engine.cleanup()
+        super().closeEvent(event)
 
 
 def apply_dark_palette(app: QApplication) -> None:

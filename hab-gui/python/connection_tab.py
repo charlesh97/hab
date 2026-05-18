@@ -25,8 +25,9 @@ except ImportError:
 
 
 class ConnectionTab(QWidget):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, engine=None, parent=None) -> None:
         super().__init__(parent)
+        self.engine = engine
 
         self.discovered_devices = []
         self.connected_device = None
@@ -217,6 +218,18 @@ class ConnectionTab(QWidget):
             self.append_log("Connected successfully.")
             self.btn_disconnect.setEnabled(True)
             self.btn_apply_params.setEnabled(True)
+
+            # Notify engine
+            if self.engine:
+                from hab_engine.models import DeviceInfo
+                info = DeviceInfo(
+                    serial=dict(device).get("serial", "unknown"),
+                    label=dict(device).get("label", "HackRF"),
+                    connected=True,
+                    frequency=float(self.input_frequency.text()) * 1e6,
+                    sample_rate=float(self.input_sample_rate.text()) * 1e6,
+                )
+                self.engine.update_device_state(info)
             
             # Apply initial parameters
             self.apply_params_clicked()
@@ -236,6 +249,14 @@ class ConnectionTab(QWidget):
         self.connected_device = None
         self.btn_disconnect.setEnabled(False)
         self.btn_apply_params.setEnabled(False)
+
+        if self.engine:
+            from hab_engine.models import DeviceInfo
+            self.engine.update_device_state(DeviceInfo())
+            self.engine.update_params(
+                frequency=float(self.input_frequency.text()) * 1e6,
+                symbol_rate=float(self.input_sample_rate.text()) * 1e6,
+            )
 
     def apply_params_clicked(self) -> None:
         """Apply connection parameters to HackRF"""

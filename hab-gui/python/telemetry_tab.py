@@ -23,8 +23,15 @@ except ImportError:
 
 
 class TelemetryTab(QWidget):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, engine=None, parent=None) -> None:
         super().__init__(parent)
+        self.engine = engine
+        self._engine_spectrum = None
+        
+        # Connect engine spectrum callback
+        if self.engine:
+            self.engine.set_spectrum_callback(self._on_engine_spectrum)
+        
         layout = QVBoxLayout(self)
 
         # Header
@@ -228,12 +235,24 @@ class TelemetryTab(QWidget):
                 # Take maximum of current and previous data
                 self.max_hold_data = np.maximum(self.max_hold_data, power_db)
 
+    def _on_engine_spectrum(self, frame):
+        """Receive spectrum data from HabEngine (background thread)."""
+        # Convert to the format update_spectrum_display expects
+        import numpy as np
+        self._engine_spectrum = (np.array(frame.frequencies), np.array(frame.power_db))
+
     def update_spectrum_display(self) -> None:
-        """Update the spectrum plot display"""
-        if not PYQTGRAPH_AVAILABLE or self.spectrum_data is None:
+        """Update the spectrum plot display from either TelemetryRX or Engine."""
+        if not PYQTGRAPH_AVAILABLE:
+            return
+        
+        # Prefer engine spectrum (from DVBS2 TX), fall back to telemetry RX spectrum
+        spectrum = self._engine_spectrum if self._engine_spectrum is not None else self.spectrum_data
+        
+        if spectrum is None:
             return
 
-        frequencies, power_db = self.spectrum_data
+        frequencies, power_db = spectrum
 
         # Use max hold data if enabled, otherwise use current data
         if self.chk_max_hold.isChecked() and self.max_hold_data is not None:
