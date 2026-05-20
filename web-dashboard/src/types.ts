@@ -75,6 +75,28 @@ export interface EngineStatus {
   rx_active?: boolean;
 }
 
+export interface TelemetrySample {
+  timestamp: number;
+  altitude: number;
+  verticalSpeed: number;
+  groundSpeed: number;
+  heading: number;
+  internalTemp: number;
+  externalTemp: number;
+  pressure: number;
+  battery: number;
+  gpsSats: number;
+  lat: number;
+  lng: number;
+}
+
+export interface Packet {
+  id: string;
+  timestamp: number;
+  type: string;
+  payload: string;
+}
+
 export interface LinkStatus {
   telemetry: 'NOMINAL' | 'DEGRADED' | 'OFFLINE';
   packet: 'NOMINAL' | 'DEGRADED' | 'OFFLINE';
