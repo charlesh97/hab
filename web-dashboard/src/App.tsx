@@ -22,13 +22,6 @@ export function App() {
     packetRate,
     lastPacketAge,
     packetSeq,
-    sendCommand,
-    connectionLog,
-    clearLog,
-    ffmpegOutput,
-    tspOutput,
-    clearFfmpegOutput,
-    clearTspOutput,
     engineStatus,
   } = useHabApi();
 
@@ -79,17 +72,7 @@ export function App() {
       )}
 
       {activeView === 'settings' && (
-        <SettingsPage
-          sendCommand={sendCommand}
-          engineStatus={engineStatus}
-          connected={connected}
-          ffmpegOutput={ffmpegOutput}
-          tspOutput={tspOutput}
-          clearFfmpegOutput={clearFfmpegOutput}
-          clearTspOutput={clearTspOutput}
-          connectionLog={connectionLog}
-          clearLog={clearLog}
-        />
+        <SettingsPage onClose={() => setActiveView('mission-control')} />
       )}
     </div>
   );
