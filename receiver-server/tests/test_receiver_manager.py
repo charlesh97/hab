@@ -47,8 +47,8 @@ class TestReceiverStateMachine:
     async def test_start_transitions_to_run_then_stop_returns_to_idle(self, manager):
         manager._start_receiver = lambda: None
         manager._stop_receiver = lambda: None
-        manager._bridge_task = asyncio.current_task()
-        manager._status_task = asyncio.current_task()
+        manager._bridge_task = asyncio.ensure_future(asyncio.sleep(0))
+        manager._status_task = asyncio.ensure_future(asyncio.sleep(0))
 
         await manager.start()
         assert manager.state == ReceiverState.RUNNING
@@ -61,8 +61,8 @@ class TestReceiverStateMachine:
         manager._state = ReceiverState.ERROR
         manager._start_receiver = lambda: None
         manager._stop_receiver = lambda: None
-        manager._bridge_task = asyncio.current_task()
-        manager._status_task = asyncio.current_task()
+        manager._bridge_task = asyncio.ensure_future(asyncio.sleep(0))
+        manager._status_task = asyncio.ensure_future(asyncio.sleep(0))
 
         await manager.start()
         assert manager.state == ReceiverState.RUNNING
@@ -71,8 +71,8 @@ class TestReceiverStateMachine:
     async def test_cannot_start_when_running(self, manager):
         manager._start_receiver = lambda: None
         manager._stop_receiver = lambda: None
-        manager._bridge_task = asyncio.current_task()
-        manager._status_task = asyncio.current_task()
+        manager._bridge_task = asyncio.ensure_future(asyncio.sleep(0))
+        manager._status_task = asyncio.ensure_future(asyncio.sleep(0))
 
         await manager.start()
         with pytest.raises(InvalidStateError):
@@ -88,8 +88,8 @@ class TestReceiverStateMachine:
 
         manager._start_receiver = lambda: None
         manager._stop_receiver = lambda: None
-        manager._bridge_task = asyncio.current_task()
-        manager._status_task = asyncio.current_task()
+        manager._bridge_task = asyncio.ensure_future(asyncio.sleep(0))
+        manager._status_task = asyncio.ensure_future(asyncio.sleep(0))
 
         await manager.start()
         await asyncio.sleep(0)
@@ -117,8 +117,8 @@ class TestReceiverStateMachine:
     async def test_configure_updates_config(self, manager):
         manager._start_receiver = lambda: None
         manager._stop_receiver = lambda: None
-        manager._bridge_task = asyncio.current_task()
-        manager._status_task = asyncio.current_task()
+        manager._bridge_task = asyncio.ensure_future(asyncio.sleep(0))
+        manager._status_task = asyncio.ensure_future(asyncio.sleep(0))
 
         await manager.start()
         await manager.configure({"gain_lna": 40, "freq_hz": 440000000})
