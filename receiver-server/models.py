@@ -150,6 +150,18 @@ class WsErrorMessage(BaseModel):
     data: ErrorInfo
 
 
+class WsTelemetryMessage(BaseModel):
+    """Telemetry packet message — wraps decoded payload for dashboard consumption."""
+    type: Literal["telemetry"]
+    data: dict
+
+
+class WsEngineStatusMessage(BaseModel):
+    """Engine status message — wraps status in format dashboard expects."""
+    type: Literal["status"]
+    data: dict
+
+
 # ---- Dashboard → Server commands (data is dict; validated at runtime) ----
 
 

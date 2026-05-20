@@ -1,22 +1,45 @@
 #!/bin/bash
-# Setup environment for dvbs2-tx/rx standalone execution
+# Setup environment for dvbs2-tx/rx/dashboard execution
 # Source this file before running: source setup_env.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OS="$(uname -s)"
 
-# Try venv first (preferred)
-if [ -d "$SCRIPT_DIR/venv/bin" ]; then
-    source "$SCRIPT_DIR/venv/bin/activate"
+# Locate the Homebrew Python (3.14) that has GNU Radio installed
+BREW_PYTHON=""
+for p in /opt/homebrew/bin/python3.14 /opt/homebrew/bin/python3; do
+    if [ -x "$p" ]; then
+        BREW_PYTHON="$p"
+        break
+    fi
+done
+
+if [ -z "$BREW_PYTHON" ]; then
+    echo "ERROR: Homebrew Python not found at /opt/homebrew/bin/python3.14"
+    echo "Install with: brew install python@3.14"
+    exit 1
 fi
 
-# Add Python path for GNU Radio (Homebrew on Apple Silicon)
+# Create a wrapper function so 'python3' resolves to the right Python
+python3() {
+    "$BREW_PYTHON" "$@"
+}
+export -f python3
+
+# Also create 'python' alias
+python() {
+    "$BREW_PYTHON" "$@"
+}
+export -f python
+
+# Set PYTHONPATH for GNU Radio modules (Homebrew on Apple Silicon)
 if [ -d "/opt/homebrew/lib/python3.14/site-packages" ]; then
     export PYTHONPATH="/opt/homebrew/lib/python3.14/site-packages:$PYTHONPATH"
 fi
 
-# Add local modules
+# Add local module paths
 export PYTHONPATH="$SCRIPT_DIR/dvbs2:$PYTHONPATH"
+export PYTHONPATH="$SCRIPT_DIR/../hab-gui/python:$PYTHONPATH"
 export PYTHONPATH="$SCRIPT_DIR/deprecated:$PYTHONPATH"
 
 # Fix Qt framework conflicts (Homebrew Qt5 vs venv)
@@ -31,11 +54,6 @@ if [ -d "/opt/homebrew/Cellar/qt@5" ]; then
     export QT_PLUGIN_PATH="$QT_FRAMEWORK_PATH/plugins"
 fi
 
-# Remove venv Qt frameworks to prevent conflicts
-if [ -n "$VIRTUAL_ENV" ] && [ -n "$DYLD_FRAMEWORK_PATH" ]; then
-    export DYLD_FRAMEWORK_PATH=$(echo "$DYLD_FRAMEWORK_PATH" | tr ':' '\n' | grep -v "$VIRTUAL_ENV" | tr '\n' ':' | sed 's/:$//')
-fi
-
 # Verify
 echo "=== Environment Ready ==="
 python3 -c "
@@ -48,4 +66,4 @@ try:
 except ImportError as e:
     print(f'ERROR: {e}')
     sys.exit(1)
-" 2>&1 || echo "WARNING: GNU Radio not found in this environment"
+" || echo "WARNING: GNU Radio not found in this environment"

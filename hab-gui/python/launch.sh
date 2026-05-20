@@ -16,5 +16,7 @@ export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 echo "=== HAB Ground Station ==="
 echo "Starting GUI..."
+echo "Python: $(python3 --version 2>/dev/null || echo 'unknown')"
+echo "GNU Radio: $(python3 -c 'from gnuradio import gr; print(gr.version())' 2>/dev/null || echo 'NOT AVAILABLE')"
 
 python3 main.py "$@"

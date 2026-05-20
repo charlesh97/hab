@@ -38,10 +38,9 @@ The system is designed for real-time video streaming over radio links, with conf
 
 ```
 rf-link/
-├── gr-dvbs2rx/           # GNU Radio out-of-tree module with DVB-S2 blocks
+├── dvbs2/                # DVB-S2 TX/RX scripts (modular Python)
+├── packet/               # Packet telemetry (FSK/GMSK)
 ├── dtv-utils-master/     # Utilities including dvbs2rate calculator
-├── dvbs2-tx-mod          # Modified transmitter application with HackRF support
-├── dvbs2-rx-mod          # Modified receiver application with HackRF support
 ├── setup_env.sh          # Environment setup script
 ├── requirements.txt      # Python dependencies
 ├── sdr-commands.txt      # Ready-to-use command examples
@@ -72,9 +71,10 @@ rf-link/
 
 ### Building gr-dvbs2rx
 
-The `gr-dvbs2rx` module provides the core DVB-S2 signal processing blocks. Build it as follows:
+The `gr-dvbs2rx` module (by [igorauad](https://github.com/igorauad/gr-dvbs2rx)) provides the core DVB-S2 signal processing blocks. It is an out-of-tree module — not included with GNU Radio. Build it as follows:
 
 ```bash
+git clone --recursive https://github.com/igorauad/gr-dvbs2rx.git
 cd gr-dvbs2rx
 mkdir -p build && cd build
 cmake ..
@@ -505,12 +505,9 @@ ffplay decoded.ts
 1. Make sure you've sourced `setup_env.sh`
 2. Build and install gr-dvbs2rx:
    ```bash
-   cd gr-dvbs2rx/build
-   sudo make install
-   ```
-3. Or add the build directory to PYTHONPATH manually:
-   ```bash
-   export PYTHONPATH=$PWD/gr-dvbs2rx/build/python:$PYTHONPATH
+   git clone --recursive https://github.com/igorauad/gr-dvbs2rx.git
+   cd gr-dvbs2rx && mkdir -p build && cd build
+   cmake .. && make -j$(sysctl -n hw.ncpu) && sudo make install
    ```
 
 ### Library loading errors on macOS
@@ -571,17 +568,15 @@ The `setup_env.sh` script handles this automatically, but if you still have issu
 
 ## Additional Resources
 
-- **gr-dvbs2rx Official Documentation**: See `gr-dvbs2rx/docs/usage.md` for detailed application documentation
-- **gr-dvbs2rx Installation Guide**: See `gr-dvbs2rx/docs/installation.md` for build instructions
-- **gr-dvbs2rx Support Matrix**: See `gr-dvbs2rx/docs/support.md` for supported features and limitations
+- **gr-dvbs2rx**: [github.com/igorauad/gr-dvbs2rx](https://github.com/igorauad/gr-dvbs2rx) — upstream repo with docs and build instructions
 - **GNU Radio Wiki**: [Out-of-Tree Modules](https://wiki.gnuradio.org/index.php/OutOfTreeModules)
 - **HackRF One Documentation**: [Great Scott Gadgets](https://greatscottgadgets.com/hackrf/)
 - **DVB-S2 Standard**: ETSI EN 302 307 (Digital Video Broadcasting)
 
 ## License
 
-This project includes code from:
-- **gr-dvbs2rx**: GPLv3 (Copyright Igor Freire, Ahmet Inan, Ron Economos)
+This project references code from:
+- **gr-dvbs2rx**: GPLv3 (Copyright Igor Freire, Ahmet Inan, Ron Economos) — [upstream](https://github.com/igorauad/gr-dvbs2rx)
 - **dtv-utils**: GPLv3 (Copyright Ron Economos)
 
 See individual component licenses for details.

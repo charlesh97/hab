@@ -150,7 +150,6 @@ hab/
 │   │   ├── rx.py           # Receiver (HackRF/RTL-SDR/USRP)
 │   │   └── flowgraph.py    # GRC-generated flowgraph
 │   ├── packet/             # Packet telemetry (FSK/GMSK)
-│   ├── gr-dvbs2rx/         # GNU Radio OOT module (BUILT)
 │   ├── dtv-utils-master/   # dvbs2rate utility (COMPILED)
 │   ├── setup_env.sh        # Environment setup
 │   └── venv/               # Python venv

@@ -25,5 +25,13 @@ export PYTHONPATH="/opt/homebrew/lib/python3.14/site-packages:${PYTHONPATH}"
 HOST="${HAB_HOST:-0.0.0.0}"
 PORT="${HAB_PORT:-8000}"
 
-echo "Starting receiver server on ${HOST}:${PORT}..."
+# Check for --simulate flag
+if [[ "$*" == *"--simulate"* ]]; then
+  export HAB_SIMULATE=1
+  echo "SIMULATION MODE (no hardware required)"
+fi
+
+echo "Starting HAB Ground Station server on ${HOST}:${PORT}..."
+echo "  Dashboard: http://localhost:${PORT}"
+echo "  WebSocket: ws://localhost:${PORT}/ws"
 exec "${PYTHON}" -m uvicorn main:app --host "${HOST}" --port "${PORT}" --log-level info

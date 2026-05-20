@@ -1,6 +1,5 @@
 /**
- * WebSocket hook for live HAB telemetry from the Python backend.
- * Replaces the simulated useFlightSimulation hook with real WebSocket data.
+ * WebSocket hook for live HAB telemetry from the HAB Receiver Server.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -14,14 +13,6 @@ export interface ConnectionLogEntry {
   timestamp: number;
   message: string;
   type: 'info' | 'error' | 'warning';
-}
-
-interface SpectrumFrame {
-  f: number[];
-  p: number[];
-  fc: number;
-  span: number;
-  ts?: number;
 }
 
 interface EngineStatus {
@@ -40,8 +31,7 @@ interface WsMessage {
   data: any;
 }
 
-const WS_URL = `ws://${window.location.hostname}:3000/ws`;
-const API_BASE = `http://${window.location.hostname}:3000/api`;
+const WS_URL = `ws://${window.location.hostname}:8000/ws`;
 
 function _derivePhase(altitude: number, verticalSpeed: number): FlightPhase {
   if (altitude < 100 && Math.abs(verticalSpeed) < 1) return 'RECOVERED';
@@ -78,7 +68,7 @@ export function useHabApi() {
     telemetry: 'NOMINAL', packet: 'NOMINAL', video: 'NOMINAL',
   });
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
-  const [spectrum, setSpectrum] = useState<SpectrumFrame | null>(null);
+  const [spectrum, setSpectrum] = useState<any>(null);
   const [connectionLog, setConnectionLog] = useState<ConnectionLogEntry[]>([]);
   const [position, setPosition] = useState<PositionData>({
     lat: 39.3187, lon: -120.3289, alt_m: 18342.7, agl_m: 17210.3,
@@ -117,7 +107,6 @@ export function useHabApi() {
   const prevEngineStatusRef = useRef<EngineStatus | null>(null);
   const addLogEntryRef = useRef<(message: string, type: ConnectionLogEntry['type']) => void>(() => {});
 
-  // Keep addLogEntryRef pointing to a stable setter so WebSocket callbacks don't cause re-renders
   addLogEntryRef.current = useCallback((message: string, type: ConnectionLogEntry['type']) => {
     setConnectionLog((prev) => {
       const entry: ConnectionLogEntry = { timestamp: Date.now(), message, type };
@@ -126,12 +115,10 @@ export function useHabApi() {
     });
   }, []);
 
-  // Keep currentRef in sync
   useEffect(() => {
     currentRef.current = current;
   });
 
-  // Derive flight phase from current telemetry
   useEffect(() => {
     setPhase(_derivePhase(current.altitude, current.verticalSpeed));
   }, [current.altitude, current.verticalSpeed]);
@@ -159,7 +146,7 @@ export function useHabApi() {
             if (msg.type === 'status') {
               setEngineStatus(msg.data);
               setMissionTime((prev) => prev + 1);
-            } else if (msg.type === 'spectrum') { 
+            } else if (msg.type === 'spectrum') {
               setSpectrum(msg.data);
             } else if (msg.type === 'telemetry') {
               const data: TelemetryMessage = msg.data;
@@ -181,6 +168,55 @@ export function useHabApi() {
                 addLogEntry(time, 'PWR', `v:${data.bat_v.toFixed(2)}V a:${data.bat_a.toFixed(2)}A w:${data.bat_w.toFixed(1)}W ${data.bat_pct.toFixed(0)}%`);
               }
 
+              // Update TelemetrySample from incoming telemetry
+              if (data.type === 'position') {
+                setCurrent((prev) => ({
+                  ...prev,
+                  timestamp: Date.now(),
+                  lat: data.lat,
+                  lng: data.lon,
+                  altitude: data.alt_m,
+                  gpsSats: data.sats,
+                }));
+                setHistory((prev) => {
+                  const sample: TelemetrySample = {
+                    timestamp: Date.now(),
+                    altitude: data.alt_m,
+                    verticalSpeed: 0,
+                    groundSpeed: 0,
+                    heading: 0,
+                    internalTemp: 0,
+                    externalTemp: 0,
+                    pressure: 0,
+                    battery: 0,
+                    gpsSats: data.sats,
+                    lat: data.lat,
+                    lng: data.lon,
+                  };
+                  const next = [...prev, sample];
+                  return next.length > 300 ? next.slice(next.length - 300) : next;
+                });
+              }
+              if (data.type === 'environment') {
+                setCurrent((prev) => ({
+                  ...prev,
+                  externalTemp: data.temp_ext_c,
+                  internalTemp: data.temp_int_c,
+                  pressure: data.pressure_hpa,
+                }));
+              }
+              if (data.type === 'motion') {
+                setCurrent((prev) => ({
+                  ...prev,
+                  verticalSpeed: data.vs_mps,
+                  groundSpeed: data.gs_mps,
+                  heading: data.heading_deg,
+                }));
+              }
+              if (data.type === 'power') {
+                setCurrent((prev) => ({ ...prev, battery: data.bat_pct }));
+              }
+
               const now = Date.now();
               setPackets((prev) => {
                 const next = [...prev, { id: `PKT-${data.seq}`, timestamp: now, type: 'TELEMETRY', payload: JSON.stringify(data) }];
@@ -188,7 +224,7 @@ export function useHabApi() {
               });
             }
           } catch (e) {
-            // Don't log parse errors to the connection log — they're debug-only
+            // Parse errors are debug-only
           }
         };
 
@@ -235,7 +271,6 @@ export function useHabApi() {
     const prev = prevEngineStatusRef.current;
     const add = addLogEntryRef.current;
 
-    // Device connect/disconnect
     if (prev && !prev.device_connected && engineStatus.device_connected) {
       const serial = engineStatus.device_serial || 'unknown';
       add(`HackRF connected: ${serial}`, 'info');
@@ -243,19 +278,16 @@ export function useHabApi() {
       add('Device disconnected', 'error');
     }
 
-    // Serial change (new device or serial populated)
     if (engineStatus.device_serial && prev?.device_serial !== engineStatus.device_serial) {
       add(`HackRF connected: ${engineStatus.device_serial}`, 'info');
     }
 
-    // TX start/stop
     if (prev && !prev.tx_active && engineStatus.tx_active) {
       add('TX started', 'info');
     } else if (prev && prev.tx_active && !engineStatus.tx_active) {
       add('TX stopped', 'info');
     }
 
-    // Pipeline start/stop
     if (engineStatus.pipeline && prev?.pipeline) {
       if (!prev.pipeline.running && engineStatus.pipeline.running) {
         add('Pipeline started', 'info');
@@ -268,134 +300,46 @@ export function useHabApi() {
   }, [engineStatus]);
 
   const sendCommand = useCallback((command: string, data?: any) => {
+    // Map command names to receiver-server message types
+    const typeMap: Record<string, string> = {
+      'start': 'cmd:start',
+      'stop': 'cmd:stop',
+      'configure': 'cmd:configure',
+      'set_frequency': 'cmd:configure',
+      'set_gain': 'cmd:configure',
+    };
+    const msgType = typeMap[command] || command;
+    const payload = { type: msgType, data: data || {} };
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ command, data: data || {} }));
+      wsRef.current.send(JSON.stringify(payload));
     }
-    // Also send via HTTP POST as fallback
-    fetch(`${API_BASE}/command`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command, data: data || {} }),
-    }).catch(() => {});
   }, []);
 
   const clearLog = useCallback(() => {
     setConnectionLog([]);
   }, []);
 
-  // Spectrum via SSE with HTTP polling fallback
-  useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let pollingInterval: ReturnType<typeof setInterval> | null = null;
-    let isDisposed = false;
-
-    function startPolling() {
-      pollingInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`${API_BASE}/spectrum`);
-          const data = await res.json();
-          if (data && data.power_db) {
-            setSpectrum({
-              f: data.frequencies || [],
-              p: data.power_db || [],
-              fc: data.center_freq || 915e6,
-              span: data.span_hz || 2e6,
-              ts: data.timestamp || data.ts || undefined,
-            });
-          }
-        } catch {}
-      }, 200);
-    }
-
-    function startSSE() {
-      if (isDisposed) return;
-      try {
-        const es = new EventSource(`${API_BASE}/spectrum/live`);
-
-        es.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data && data.power_db) {
-              setSpectrum({
-                f: data.frequencies || [],
-                p: data.power_db || [],
-                fc: data.center_freq || 915e6,
-                span: data.span_hz || 2e6,
-                ts: data.timestamp || data.ts || undefined,
-              });
-            }
-          } catch (e) {
-            console.warn('[HAB] SSE parse error:', e);
-          }
-        };
-
-        es.onerror = () => {
-          es.close();
-          eventSource = null;
-          // Fallback to HTTP polling on SSE failure
-          if (!isDisposed) {
-            startPolling();
-          }
-        };
-
-        eventSource = es;
-      } catch (e) {
-        if (!isDisposed) startPolling();
-      }
-    }
-
-    startSSE();
-
-    return () => {
-      isDisposed = true;
-      if (eventSource) eventSource.close();
-      if (pollingInterval) clearInterval(pollingInterval);
-    };
-  }, []);
-
   // Compute packetsReceiving from actual packet recency
   const packetsReceiving = useMemo(() => {
     if (packets.length === 0) return false;
-    return (Date.now() - packets[packets.length - 1].timestamp) < 5000;
+    return (Date.now() - packets[packets.length - 1].timestamp) < 10000;
   }, [packets]);
 
-  // Fetch telemetry periodically + update link status
+  // Periodically update link status based on connection and packet recency
   useEffect(() => {
     if (!connected) {
       setNewLinkStatus((prev) => ({ ...prev, telemetry: 'OFFLINE', packet: 'OFFLINE' }));
       return;
     }
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/telemetry/latest`);
-        const data = await res.json();
-        if (data && data.altitude !== undefined) {
-          setCurrent(data);
-          setHistory((prev) => {
-            const next = [...prev, data];
-            return next.length > 300 ? next.slice(next.length - 300) : next;
-          });
-          // Create a packet from telemetry sample
-          const pk: Packet = {
-            id: `TLM-${Date.now()}`,
-            timestamp: Date.now(),
-            type: 'TELEMETRY',
-            payload: `A:${data.altitude.toFixed(0)}m V:${data.verticalSpeed.toFixed(1)}m/s T:${data.externalTemp.toFixed(1)}°C GPS:${data.gpsSats}`,
-          };
-          setPackets((prev) => {
-            const next = [...prev, pk];
-            return next.length > 200 ? next.slice(-200) : next;
-          });
-          setNewLinkStatus((prev) => ({
-            ...prev,
-            telemetry: packetsReceiving ? 'NOMINAL' : 'DEGRADED',
-            packet: data.gpsSats > 0 ? 'NOMINAL' : 'OFFLINE',
-          }));
-        }
-      } catch {}
-    }, 1000); // 1Hz telemetry
+    const interval = setInterval(() => {
+      setNewLinkStatus((prev) => ({
+        ...prev,
+        telemetry: packetsReceiving ? 'NOMINAL' : 'DEGRADED',
+        packet: packetSeq > 0 ? 'NOMINAL' : 'OFFLINE',
+      }));
+    }, 2000);
     return () => clearInterval(interval);
-  }, [connected, packetsReceiving]);
+  }, [connected, packetsReceiving, packetSeq]);
 
   // Update video link status based on engine pipeline
   useEffect(() => {
@@ -404,36 +348,6 @@ export function useHabApi() {
       video: engineStatus?.pipeline?.running ? 'NOMINAL' : 'OFFLINE',
     }));
   }, [engineStatus?.pipeline?.running]);
-
-  // Pipeline debug output — fetch from server at 2 Hz
-  const [ffmpegOutput, setFfmpegOutput] = useState<string[]>([]);
-  const [tspOutput, setTspOutput] = useState<string[]>([]);
-
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/pipeline/logs`);
-        const data = await res.json();
-        if (data.ffmpeg) setFfmpegOutput(data.ffmpeg);
-        if (data.tsp) setTspOutput(data.tsp);
-      } catch {}
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  const clearFfmpegOutput = useCallback(async () => {
-    try {
-      await fetch(`${API_BASE}/pipeline/logs/clear`, { method: 'POST' });
-      setFfmpegOutput([]);
-    } catch {}
-  }, []);
-
-  const clearTspOutput = useCallback(async () => {
-    try {
-      await fetch(`${API_BASE}/pipeline/logs/clear`, { method: 'POST' });
-      setTspOutput([]);
-    } catch {}
-  }, []);
 
   return {
     connected,
@@ -450,10 +364,6 @@ export function useHabApi() {
     sendCommand,
     connectionLog,
     clearLog,
-    ffmpegOutput,
-    tspOutput,
-    clearFfmpegOutput,
-    clearTspOutput,
     position,
     motion,
     environment,

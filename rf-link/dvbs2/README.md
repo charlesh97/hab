@@ -1,7 +1,8 @@
 # DVB-S2 Video Link for HAB
+https://github.com/igorauad/gr-dvbs2rx
+
 
 ## Files
-
 | File | Purpose |
 |------|---------|
 | `tx.py` | Full-featured DVB-S2 transmitter (CLI, supports HackRF/USRP/BladeRF/PlutoSDR/file) |
@@ -69,3 +70,4 @@ For QPSK 1/2 at 1 Msym/s with pilots ON: **965,326 bps** transport stream bitrat
 Adjust video encode bitrate accordingly (e.g. `-b:v 700k -b:a 128k`).
 
 See `../dtv-utils-master/dvbs2rate` for other modcods.
+(https://github.com/drmpeg/dtv-utils/tree/master)

@@ -44,8 +44,12 @@ class WebSocketManager:
     async def broadcast_packet(self, packet: dict):
         await self.broadcast({"type": "packet", "data": packet})
 
-    async def broadcast_status(self, status: ReceiverStatus):
-        await self.broadcast({"type": "status", "data": status.model_dump()})
+    async def broadcast_status(self, status: ReceiverStatus | dict):
+        if isinstance(status, ReceiverStatus):
+            data = status.model_dump()
+        else:
+            data = status
+        await self.broadcast({"type": "status", "data": data})
 
     async def broadcast_spectrum(self, spectrum: SpectrumFrame):
         await self.broadcast({"type": "spectrum", "data": spectrum.model_dump()})

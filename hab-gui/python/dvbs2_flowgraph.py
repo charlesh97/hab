@@ -64,7 +64,11 @@ class Dvbs2Flowgraph(gr.top_block):
         self.spectrum_queue = queue.Queue(maxsize=5)
 
         # Map modcod string to DVB-S2 constants
+        # Normalizes: "QPSK 1/4" → "QPSK1/4", "8PSK 3/5" → "8PSK3/5", etc.
         self._modcod_map = {
+            "QPSK1/4":  (dtv.C1_4, dtv.MOD_QPSK),
+            "QPSK1/3":  (dtv.C1_3, dtv.MOD_QPSK),
+            "QPSK2/5":  (dtv.C2_5, dtv.MOD_QPSK),
             "QPSK1/2":  (dtv.C1_2, dtv.MOD_QPSK),
             "QPSK3/5":  (dtv.C3_5, dtv.MOD_QPSK),
             "QPSK2/3":  (dtv.C2_3, dtv.MOD_QPSK),
@@ -81,14 +85,22 @@ class Dvbs2Flowgraph(gr.top_block):
             "8PSK9/10": (dtv.C9_10, dtv.MOD_8PSK),
         }
 
+        # Normalize modcod: remove spaces, hyphens, slashes — keep only letters and numbers
+        modcod_key = ''.join(c for c in modcod.upper() if c.isalnum() or c == '/')
+        modcod_key = modcod_key.replace('/', '')
         code_rate, constellation = self._modcod_map.get(
-            modcod.upper().replace("-", "").replace("/", ""),
-            (dtv.C1_2, dtv.MOD_QPSK)  # default QPSK 1/2
+            modcod_key,
+            (dtv.C1_4, dtv.MOD_QPSK)  # default QPSK 1/4 (lowest code rate for robustness)
         )
 
         pilots_mode = dtv.PILOTS_ON if pilots else dtv.PILOTS_OFF
         fec_frame = dtv.FECFRAME_NORMAL
-        rolloff_const = dtv.RO_0_20
+        _rolloff_map = {
+            0.2: dtv.RO_0_20,
+            0.25: dtv.RO_0_25,
+            0.35: dtv.RO_0_35,
+        }
+        rolloff_const = _rolloff_map.get(self.rolloff, dtv.RO_0_20)
 
         ##################################################
         # Blocks
@@ -287,15 +299,37 @@ class Dvbs2Flowgraph(gr.top_block):
             return None
 
     def stop(self):
-        """Stop the flowgraph"""
+        """Stop the flowgraph.
+        Uses SIGTERM approach: lock flowgraph, then stop.
+        If device is stuck, avoid SIGKILL which can wedge the HackRF USB state.
+        """
         self._spectrum_running = False
         if self._spectrum_thread and self._spectrum_thread.is_alive():
             self._spectrum_thread.join(timeout=1.0)
-        gr.top_block.stop(self)
+        try:
+            # Lock the flowgraph before stopping to ensure clean shutdown
+            self.lock()
+            gr.top_block.stop(self)
+        except Exception as e:
+            logger.error(f"Error stopping flowgraph (lock): {e}")
+            try:
+                gr.top_block.stop(self)
+            except Exception as e2:
+                logger.error(f"Error stopping flowgraph (unlock): {e2}")
+        finally:
+            try:
+                self.unlock()
+            except Exception:
+                pass
 
     def wait(self):
-        """Wait for flowgraph to complete"""
-        gr.top_block.wait(self)
+        """Wait for flowgraph to complete (with timeout to avoid hanging on stuck device)."""
+        import threading
+        wait_thread = threading.Thread(target=gr.top_block.wait, args=(self,), daemon=True)
+        wait_thread.start()
+        wait_thread.join(timeout=5.0)
+        if wait_thread.is_alive():
+            logger.warning("Flowgraph wait() timed out — device may be stuck. Using SIGTERM-style cleanup.")
 
     def reconfigure(self, center_freq=None, symbol_rate=None, tx_gain_vga=None,
                     tx_gain_amp=None):
