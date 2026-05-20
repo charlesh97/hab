@@ -1,4 +1,49 @@
-export default {content: [
-  './index.html',
-  './src/**/*.{js,ts,jsx,tsx}'
-],}
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        'surface': '#0b141c',
+        'surface-container': '#182028',
+        'surface-container-low': '#141c24',
+        'surface-container-lowest': '#060f16',
+        'surface-container-high': '#222b33',
+        'surface-container-highest': '#2d363e',
+        'surface-bright': '#313a43',
+        'surface-dim': '#0b141c',
+        'surface-variant': '#2d363e',
+        'outline': '#8b919f',
+        'outline-variant': '#414753',
+        'primary': '#abc7ff',
+        'primary-container': '#448ffd',
+        'secondary': '#7cd9a3',
+        'secondary-container': '#027548',
+        'tertiary': '#f5be4e',
+        'tertiary-container': '#b9891a',
+        'on-surface': '#dae3ee',
+        'on-surface-variant': '#c1c6d5',
+        'on-primary': '#002f65',
+        'on-primary-container': '#002959',
+        'on-secondary': '#003920',
+        'on-secondary-container': '#9af8bf',
+        'on-tertiary': '#412d00',
+        'on-tertiary-container': '#382700',
+        'telemetry-blue': '#2f80ed',
+        'tracking-green': '#4daa78',
+        'reentry-red': '#e05344',
+        'background': '#0b141c',
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+      fontSize: {
+        'mono-data': ['13px', { lineHeight: '16px', fontWeight: '400' }],
+        'label-caps': ['11px', { lineHeight: '12px', letterSpacing: '0.06em', fontWeight: '600' }],
+        'telemetry-lg': ['32px', { lineHeight: '32px', letterSpacing: '-0.04em', fontWeight: '600' }],
+        'mission-name': ['34px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '700' }],
+      },
+    },
+  },
+  plugins: [],
+}

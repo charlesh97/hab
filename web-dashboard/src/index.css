@@ -39,3 +39,9 @@
   background: #f8fafc !important;
   font-family: 'Inter', sans-serif !important;
 }
+
+body {
+  background-color: #0b141c;
+  background-image: radial-gradient(circle at 2px 2px, #30363d 1px, transparent 0);
+  background-size: 32px 32px;
+}
