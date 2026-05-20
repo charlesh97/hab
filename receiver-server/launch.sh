@@ -10,4 +10,4 @@ HOST="${HAB_HOST:-0.0.0.0}"
 PORT="${HAB_PORT:-8000}"
 
 echo "Starting receiver server on ${HOST}:${PORT}..."
-exec python -m uvicorn main:app --host "${HOST}" --port "${PORT}" --log-level info
+exec python3 -m uvicorn main:app --host "${HOST}" --port "${PORT}" --log-level info
