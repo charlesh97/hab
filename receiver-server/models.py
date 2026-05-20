@@ -1,13 +1,10 @@
 # receiver-server/models.py
-"""Pydantic v2 models for telemetry packets, status, WebSocket messages."""
+"""Pydantic v2 models for telemetry payloads, receiver status, and spectrum data."""
 
+from __future__ import annotations
 from enum import Enum
 from typing import Literal
-
 from pydantic import BaseModel
-
-
-# ---- Sub-models for nested telemetry fields ----
 
 
 class AccelData(BaseModel):
@@ -32,9 +29,6 @@ class RailsVData(BaseModel):
     v5: float
     v3v3: float
     v1v8: float
-
-
-# ---- Telemetry payload discriminated by type ----
 
 
 class EnvironmentPayload(BaseModel):
@@ -80,9 +74,6 @@ class PowerPayload(BaseModel):
     rails_v: RailsVData
 
 
-# ---- Receiver state machine ----
-
-
 class ReceiverState(str, Enum):
     IDLE = "idle"
     STARTING = "starting"
@@ -110,6 +101,7 @@ class ReceiverStatus(BaseModel):
 
 
 class SpectrumFrame(BaseModel):
+    """Spectrum frame — frequencies and power values."""
     fc_hz: int
     span_hz: int
     points: list[float]
@@ -125,56 +117,3 @@ class ErrorCode(str, Enum):
 class ErrorInfo(BaseModel):
     code: ErrorCode
     message: str
-
-
-# ---- WebSocket envelope messages ----
-
-
-class WsPacketMessage(BaseModel):
-    type: Literal["packet"]
-    data: dict
-
-
-class WsStatusMessage(BaseModel):
-    type: Literal["status"]
-    data: ReceiverStatus
-
-
-class WsSpectrumMessage(BaseModel):
-    type: Literal["spectrum"]
-    data: SpectrumFrame
-
-
-class WsErrorMessage(BaseModel):
-    type: Literal["error"]
-    data: ErrorInfo
-
-
-class WsTelemetryMessage(BaseModel):
-    """Telemetry packet message — wraps decoded payload for dashboard consumption."""
-    type: Literal["telemetry"]
-    data: dict
-
-
-class WsEngineStatusMessage(BaseModel):
-    """Engine status message — wraps status in format dashboard expects."""
-    type: Literal["status"]
-    data: dict
-
-
-# ---- Dashboard → Server commands (data is dict; validated at runtime) ----
-
-
-class CmdStart(BaseModel):
-    type: Literal["cmd:start"]
-    data: dict
-
-
-class CmdStop(BaseModel):
-    type: Literal["cmd:stop"]
-    data: dict = {}
-
-
-class CmdConfigure(BaseModel):
-    type: Literal["cmd:configure"]
-    data: dict

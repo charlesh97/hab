@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 
-from config import ServerConfig, ReceiverConfig
+from config import ReceiverConfig
 from ws_manager import WebSocketManager
 from receiver_manager import ReceiverManager
 from routes.rest import create_rest_router
@@ -34,7 +34,6 @@ from routes.ws import create_ws_router
 
 
 def create_app(simulate: bool = False) -> FastAPI:
-    server_config = ServerConfig()
     receiver_config = ReceiverConfig()
     ws_manager = WebSocketManager()
     receiver_manager = ReceiverManager(ws_manager, receiver_config, simulate=simulate)

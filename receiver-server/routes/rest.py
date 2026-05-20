@@ -38,8 +38,8 @@ def create_rest_router(receiver_manager=None, ws_manager=None):
                 for d in devices
             ]
         except ImportError:
-            return {"error": "SoapySDR not available"}
-        except Exception as e:
-            return {"error": str(e)}
+            return []
+        except Exception:
+            return []
 
     return router

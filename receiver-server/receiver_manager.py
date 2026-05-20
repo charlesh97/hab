@@ -114,7 +114,6 @@ class ReceiverManager:
         self._packets_valid = 0
         self._spectrum_frame = None
         self._simulate = simulate
-        self._uptime_start: float | None = None
         self._start_time: float | None = None
 
     @property
@@ -193,7 +192,6 @@ class ReceiverManager:
         self._receiver = object()  # placeholder
         self._simulate_task = asyncio.create_task(self._simulate_loop())
         self._spectrum_task = asyncio.create_task(self._simulate_spectrum_loop())
-        # Bridge task is just the simulation loop
         self._bridge_task = self._simulate_task
 
     async def _simulate_loop(self):
@@ -220,18 +218,7 @@ class ReceiverManager:
                     span_hz=self._config.sample_rate,
                 )
                 self._spectrum_frame = frame
-                await self._ws.broadcast({
-                    "type": "spectrum",
-                    "data": {
-                        "f": [self._config.freq_hz - self._config.sample_rate / 2
-                              + i * self._config.sample_rate / len(frame.points)
-                              for i in range(len(frame.points))],
-                        "p": frame.points,
-                        "fc": self._config.freq_hz,
-                        "span": self._config.sample_rate,
-                        "ts": frame.ts,
-                    },
-                })
+                await self._ws.broadcast_spectrum(frame)
                 await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             pass
@@ -239,7 +226,7 @@ class ReceiverManager:
     async def _cleanup(self):
         self._stop_receiver()
         self._receiver = None
-        for task in (self._bridge_task, self._status_task, self._spectrum_task):
+        for task in (self._simulate_task, self._status_task, self._spectrum_task):
             if task and not task.done():
                 task.cancel()
                 try:
