@@ -44,6 +44,7 @@ class ReceiverManager:
         try:
             self._start_receiver()
             self._state = ReceiverState.RUNNING
+            await self._ws.broadcast_status(self._build_status())
         except Exception:
             await self._cleanup()
             self._state = ReceiverState.IDLE

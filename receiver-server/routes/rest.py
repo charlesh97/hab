@@ -1,7 +1,6 @@
 # receiver-server/routes/rest.py
 """REST endpoints — health check, packet query, device enumeration."""
 
-import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -25,16 +24,22 @@ def create_rest_router(receiver_manager=None, ws_manager=None):
 
     @router.get("/api/devices")
     async def list_devices():
+        """Enumerate SDR devices via SoapySDR (supports HackRF, RTL-SDR, etc.)."""
         try:
-            result = subprocess.run(
-                ["hackrf_info"], capture_output=True, text=True, timeout=5
-            )
-            serials = []
-            for line in result.stdout.splitlines():
-                if "Serial Number:" in line:
-                    serials.append(line.split(":")[-1].strip())
-            return serials
-        except Exception:
-            return []
+            import SoapySDR
+            devices = SoapySDR.Device.enumerate()
+            return [
+                {
+                    "driver": d["driver"],
+                    "serial": d["serial"],
+                    "label": d["label"],
+                    "version": d["version"],
+                }
+                for d in devices
+            ]
+        except ImportError:
+            return {"error": "SoapySDR not available"}
+        except Exception as e:
+            return {"error": str(e)}
 
     return router
