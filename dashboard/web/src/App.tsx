@@ -22,6 +22,7 @@ export function App() {
     lastPacketAge,
     metricHistory,
     newLinkStatus,
+    loadPositions,
   } = useHabApi();
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export function App() {
           packetRate={packetRate}
           logEntries={logEntries}
           metricHistory={metricHistory}
+          loadPositions={loadPositions}
         />
       )}
 

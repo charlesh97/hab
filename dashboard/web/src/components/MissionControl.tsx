@@ -29,6 +29,7 @@ interface MissionControlProps {
     pitch: MetricPoint[];
     yaw: MetricPoint[];
   };
+  loadPositions: (since: number) => Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>>;
 }
 
 export function MissionControl({
@@ -39,13 +40,14 @@ export function MissionControl({
   packetRate,
   logEntries,
   metricHistory,
+  loadPositions,
 }: MissionControlProps) {
   return (
     <>
       <main className="ml-[64px] mt-[72px] h-[calc(100vh-272px)] p-4 grid grid-cols-[2fr_3fr_2fr] gap-4">
         {/* Left Column: Map */}
         <section className="overflow-hidden">
-          <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} />
+          <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} loadPositions={loadPositions} />
         </section>
 
         {/* Center Column: Video Feed */}
