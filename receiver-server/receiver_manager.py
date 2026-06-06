@@ -223,6 +223,18 @@ class ReceiverManager:
         except asyncio.CancelledError:
             pass
 
+    async def ingest_packet(self, packet: dict):
+        """Receive and broadcast a telemetry packet from external sources.
+
+        Called by the REST API when an external client (e.g. balloon-sim.py)
+        POSTs a packet.  Appends to the packet buffer, updates counters,
+        and broadcasts to all connected WebSocket clients.
+        """
+        self._packet_buffer.append(packet)
+        self._packets_total += 1
+        self._packets_valid += 1
+        await self._ws.broadcast({"type": "telemetry", "data": packet})
+
     async def _cleanup(self):
         self._stop_receiver()
         self._receiver = None

@@ -1,6 +1,8 @@
 # receiver-server/ws_manager.py
 """WebSocket connection manager — multiplexed broadcast to all clients."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 
