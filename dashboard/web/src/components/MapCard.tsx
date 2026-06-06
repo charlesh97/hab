@@ -6,7 +6,7 @@ interface MapCardProps {
 
 export function MapCard({ lat, lon, alt_m }: MapCardProps) {
   return (
-    <div className="card-border bg-surface-container-low rounded-[20px] border border-outline-variant flex flex-col h-[35%] min-h-[200px]">
+    <div className="card-border bg-surface-container-low rounded-[20px] border border-outline-variant flex flex-col h-full">
       <div className="p-3 border-b border-outline-variant flex justify-between items-center">
         <span className="data-label text-label-caps text-outline">LIVE MAP</span>
         <span className="text-[10px] font-mono text-outline">v2.4-STABLE</span>
