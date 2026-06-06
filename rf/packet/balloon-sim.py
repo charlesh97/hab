@@ -222,11 +222,6 @@ class BalloonSimulator:
             "bat_w": round(v_nom * i_load + random.uniform(-0.1, 0.1), 2),
             "bat_pct": max(0, int(self.bat_pct + random.uniform(-0.5, 0.5))),
             "bat_temp_c": round(TEMP_INT_C + random.uniform(-1, 2), 2),
-            "rails_v": {
-                "v5": round(5.0 + random.uniform(-0.05, 0.05), 3),
-                "v3v3": round(3.3 + random.uniform(-0.03, 0.03), 3),
-                "v1v8": round(1.8 + random.uniform(-0.02, 0.02), 3),
-            },
         }
 
     # ── flight physics tick ─────────────────────────────────────────────

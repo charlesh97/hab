@@ -1,0 +1,171 @@
+<h2>Proposed Layout: Map-Left / Video-Center / Data-Right</h2>
+<p class="subtitle">All data cards consolidated on the right — is this the direction you're thinking?</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current Layout (scattered cards)</div>
+    <div class="mockup-body">
+      <div style="background:#0b141c; padding:4px; border-radius:6px; font-family:monospace; font-size:9px; color:#8b919f; line-height:1.4">
+        <div style="display:grid; grid-template-columns:250px 1fr 250px; gap:3px; min-height:300px">
+          <!-- Left - scattered cards -->
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:4px; height:60px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Map</span>
+              <div style="font-size:7px;margin-top:2px">[Leaflet]</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Position</span>
+              <div style="font-size:7px">Lat/Lon/Alt/Sats</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Motion</span>
+              <div style="font-size:7px">GS/VS/Heading/Yaw</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Environment</span>
+              <div style="font-size:7px">Temp/Pres/Humidity</div>
+            </div>
+          </div>
+          <!-- Center -->
+          <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:4px">
+            <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Camera Feed</span>
+            <div style="font-size:7px;margin-top:4px;border:1px dashed #414753;border-radius:4px;padding:8px;text-align:center">No video</div>
+          </div>
+          <!-- Right - scattered cards -->
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">RF Link</span>
+              <div style="font-size:7px">TEL/PKT/VID status</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Power</span>
+              <div style="font-size:7px">Battery/Voltage</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Alerts</span>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:3px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em">Packet Rate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Proposed: Map | Video | Data Cards</div>
+    <div class="mockup-body">
+      <div style="background:#0b141c; padding:4px; border-radius:6px; font-family:monospace; font-size:9px; color:#dae3ee; line-height:1.4">
+        <!-- TopBar -->
+        <div style="background:#182028; border-bottom:1px solid #414753; padding:6px 10px; margin-bottom:4px; display:flex; justify-content:space-between; border-radius:4px">
+          <span style="font-weight:700">HAB-1 STRATOS</span>
+          <span style="color:#4daa78;font-size:8px">NOMINAL&nbsp;|&nbsp;T+03:45:12</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:2fr 3fr 2fr; gap:4px; min-height:320px">
+          <!-- Left: Map -->
+          <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:6px; display:flex; flex-direction:column">
+            <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Live Map</span>
+            <div style="background:#2d363e; border-radius:4px; flex:1; margin-top:4px; display:flex; align-items:center; justify-content:center; color:#8b919f">
+              <span style="font-size:8px">Leaflet Map<br/>+ balloon track</span>
+            </div>
+          </div>
+
+          <!-- Center: Video -->
+          <div style="background:#182028; border:1px solid #414753; border-radius:4px; padding:6px; display:flex; flex-direction:column">
+            <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Video Feed</span>
+            <div style="background:#0b141c; border:1px dashed #414753; border-radius:4px; flex:1; margin-top:4px; display:flex; align-items:center; justify-content:center; color:#8b919f">
+              <span style="font-size:8px">Stream / Placeholder</span>
+            </div>
+          </div>
+
+          <!-- Right: Consolidated Data Cards -->
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <!-- Card: Position & Navigation -->
+            <div style="background:#182028;border:1px solid #414753;border-radius:4px;padding:6px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Navigation</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 6px;margin-top:3px;font-size:8px;color:#c1c6d5">
+                <div>ALT <span style="color:#abc7ff;font-size:13px;font-weight:600">24,348</span><span style="color:#8b919f">m</span></div>
+                <div>GS <span style="color:#abc7ff">9.4</span><span style="color:#8b919f">m/s</span></div>
+                <div>VS <span style="color:#4daa78">+4.2</span><span style="color:#8b919f">m/s</span></div>
+                <div>HDG <span style="color:#abc7ff">045&deg;</span></div>
+                <div>LAT <span style="color:#abc7ff">34.1234&deg;N</span></div>
+                <div>LON <span style="color:#abc7ff">118.5678&deg;W</span></div>
+                <div>SATS <span style="color:#4daa78">11</span></div>
+                <div>HDOP <span style="color:#abc7ff">1.2</span></div>
+              </div>
+            </div>
+
+            <!-- Card: Environment -->
+            <div style="background:#182028;border:1px solid #414753;border-radius:4px;padding:6px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Environment</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 6px;margin-top:3px;font-size:8px;color:#c1c6d5">
+                <div>EXT <span style="color:#abc7ff">-52.3</span><span style="color:#8b919f">&deg;C</span></div>
+                <div>INT <span style="color:#abc7ff">+22.1</span><span style="color:#8b919f">&deg;C</span></div>
+                <div>PRESS <span style="color:#abc7ff">68.5</span><span style="color:#8b919f">hPa</span></div>
+                <div>HUM <span style="color:#abc7ff">12</span><span style="color:#8b919f">%</span></div>
+              </div>
+            </div>
+
+            <!-- Card: Power & Link -->
+            <div style="background:#182028;border:1px solid #414753;border-radius:4px;padding:6px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Power & Link</span>
+              <div style="margin-top:3px;font-size:8px">
+                <div style="display:flex;justify-content:space-between">
+                  <span>BAT <span style="color:#4daa78;font-size:14px;font-weight:600">88.5</span><span style="color:#8b919f">%</span></span>
+                  <span style="color:#c1c6d5">12.1V / 0.8A</span>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:4px; font-size:8px">
+                  <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78;display:inline-block"></span>TEL</span>
+                  <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78;display:inline-block"></span>PKT</span>
+                  <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#e05344;display:inline-block"></span>VID</span>
+                  <span style="display:flex;align-items:center;gap:3px"><span style="font-size:10px;color:#abc7ff">12.4</span><span style="color:#8b919f">pkt/s</span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card: Attitude -->
+            <div style="background:#182028;border:1px solid #414753;border-radius:4px;padding:6px">
+              <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Attitude</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px 6px;margin-top:3px;font-size:8px;color:#c1c6d5">
+                <div>ROLL <span style="color:#abc7ff">2.3&deg;</span></div>
+                <div>PITCH <span style="color:#abc7ff">-1.5&deg;</span></div>
+                <div>YAW <span style="color:#abc7ff">045&deg;</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal-style Packet Stream -->
+        <div style="background:#060f16; border:1px solid #414753; border-radius:4px; margin-top:4px; padding:4px 8px; font-size:8px; font-family:'JetBrains Mono',monospace; color:#4daa78; height:40px">
+          <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:2px">&gt; Packet Stream</div>
+          <div><span style="color:#2f80ed">[14:10:23]</span> POS  lat=34.1234 lon=-118.5678 alt=24348 sats=11</div>
+          <div><span style="color:#2f80ed">[14:10:22]</span> ENV  ext=-52.3 int=22.1 pres=68.5 hum=12</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Right column: grouping approach</h3>
+  <p class="subtitle">How should the consolidated data cards be organized on the right?</p>
+
+  <div class="options">
+    <div class="option" data-choice="grouped" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Grouped by category (shown above)</h3>
+        <p>Navigation, Environment, Power & Link, Attitude — each gets its own card</p>
+      </div>
+    </div>
+    <div class="option" data-choice="single" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Single unified telemetry card</h3>
+        <p>One tall card with labeled sections — Navigation, Environment, Power, Attitude</p>
+      </div>
+    </div>
+  </div>
+</div>

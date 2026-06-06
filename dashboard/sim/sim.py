@@ -148,13 +148,8 @@ def make_power(seq: int, mission_s: float) -> dict:
         "bat_v": round(bat_v, 3),
         "bat_a": round(bat_a, 2),
         "bat_w": round(bat_w, 2),
-        "bat_pct": round(battery_pct, 1),
+        "bat_pct": int(round(battery_pct)),
         "bat_temp_c": round(bat_temp, 1),
-        "rails_v": {
-            "v5": round(5.0 + random.uniform(-0.05, 0.05), 3),
-            "v3v3": round(3.3 + random.uniform(-0.02, 0.02), 3),
-            "v1v8": round(1.8 + random.uniform(-0.01, 0.01), 3),
-        },
     }
 
 

@@ -1,0 +1,136 @@
+<h2>Current Dashboard Layout</h2>
+<p class="subtitle">HAB-1 STRATOS Mission Control — what would you like to improve?</p>
+
+<div class="mockup">
+  <div class="mockup-header">Current Layout: Mission Control</div>
+  <div class="mockup-body">
+    <div style="background:#0b141c; min-height:500px; border-radius:8px; overflow:hidden; color:#dae3ee; font-family:monospace; font-size:12px">
+
+      <!-- TopBar -->
+      <div style="background:#182028; border-bottom:1px solid #414753; padding:10px 16px; display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div style="font-size:18px; font-weight:700; color:#dae3ee">HAB-1 STRATOS</div>
+          <div style="font-size:10px; color:#8b919f">ID: #521514 &nbsp;|&nbsp; COORDS: 34.1234N / 118.5678W</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; font-size:11px">
+          <span style="display:flex; align-items:center; gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#4daa78;display:inline-block"></span>NOMINAL</span>
+          <span style="display:flex; align-items:center; gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#4daa78;display:inline-block"></span>GPS LOCK</span>
+          <span style="color:#8b919f">Last pkt: <span style="color:#dae3ee">1.2s</span></span>
+          <span style="font-size:20px; font-weight:600; color:#abc7ff">T+03:45:12</span>
+        </div>
+      </div>
+
+      <!-- Main content area with sidebar -->
+      <div style="display:flex; min-height:420px">
+        <!-- Sidebar -->
+        <div style="width:48px; background:#141c24; border-right:1px solid #414753; padding:12px 0; display:flex; flex-direction:column; align-items:center; gap:12px">
+          <div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#abc7ff;">⬡</div>
+          <div style="width:36px;height:36px;background:#448ffd;border-radius:6px;display:flex;align-items:center;justify-content:center;color:white">M</div>
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:#c1c6d5">G</div>
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:#c1c6d5">R</div>
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:#c1c6d5">?</div>
+        </div>
+
+        <!-- Main grid -->
+        <div style="display:grid; grid-template-columns: 280px 1fr 280px; gap:8px; padding:8px; flex:1">
+
+          <!-- Left Column -->
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:10px; height:80px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Map</div>
+              <div style="background:#2d363e; border-radius:4px; height:100%; margin-top:4px; display:flex; align-items:center; justify-content:center; color:#8b919f">Leaflet Map</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Position</div>
+              <div style="margin-top:4px">LAT <span style="color:#abc7ff">34.1234</span>&nbsp; LON <span style="color:#abc7ff">-118.5678</span></div>
+              <div>ALT <span style="color:#2f80ed;font-size:16px;font-weight:600">24,348</span> m</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Motion</div>
+              <div style="margin-top:4px">GS 9.4m/s &nbsp; VS +4.2m/s &nbsp; HDG 045&deg;</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Environment</div>
+              <div style="margin-top:4px">TEMP -52.3&deg;C &nbsp; PRES 68.5 hPa &nbsp; HUM 12%</div>
+            </div>
+          </div>
+
+          <!-- Center Column -->
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:10px; flex:1; display:flex; flex-direction:column">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Camera Feed</div>
+              <div style="background:#0b141c; border:1px dashed #414753; border-radius:4px; flex:1; margin-top:4px; display:flex; align-items:center; justify-content:center; color:#8b919f">No video stream connected</div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">RF Link</div>
+              <div style="margin-top:4px">
+                <span style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78;display:inline-block"></span>TEL: NOMINAL</span>
+                <span style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78;display:inline-block"></span>PKT: NOMINAL</span>
+                <span style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#e05344;display:inline-block"></span>VID: OFFLINE</span>
+              </div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Power</div>
+              <div style="margin-top:4px">BAT <span style="color:#4daa78;font-size:14px;font-weight:600">88.5%</span> &nbsp; 12.1V &nbsp; 0.8A</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Alerts</div>
+              <div style="margin-top:4px;color:#8b919f">No active alerts</div>
+            </div>
+            <div style="background:#182028; border:1px solid #414753; border-radius:6px; padding:8px; font-size:11px">
+              <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em">Packet Rate</div>
+              <div style="margin-top:4px;font-size:18px;font-weight:600;color:#abc7ff">12.4 pkt/s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Packet Stream Footer -->
+      <div style="background:#182028; border-top:1px solid #414753; margin:0 8px 0 56px; padding:6px 12px; font-size:10px; height:48px">
+        <div style="text-transform:uppercase; font-size:9px; color:#8b919f; letter-spacing:0.06em; margin-bottom:2px">Event Log / Packet Stream</div>
+        <div>[14:10:23] <span style="color:#abc7ff">[TLM]</span> A:24348m V:9.4m/s T:-52.3C</div>
+        <div>[14:10:22] <span style="color:#f5be4e">[EVT]</span> STATUS_UPDATE_NOMINAL</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>What are you looking to change?</h3>
+  <p class="subtitle">Choose what resonates most — we can explore multiple areas:</p>
+
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="layout" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Layout & Structure</h3>
+        <p>Reorganize columns, resize panels, add/remove sections, change the grid</p>
+      </div>
+    </div>
+    <div class="option" data-choice="visual" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Visual Design & Polish</h3>
+        <p>Colors, spacing, typography, glass effects, animations, dark theme refinement</p>
+      </div>
+    </div>
+    <div class="option" data-choice="cards" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Data Cards & Readability</h3>
+        <p>How telemetry/metrics display, chart improvements, data visualization</p>
+      </div>
+    </div>
+    <div class="option" data-choice="bugfix" onclick="toggleSelect(this)">
+      <div class="letter">D</div>
+      <div class="content">
+        <h3>Bug Fixes & UX Issues</h3>
+        <p>Fix broken interactions, responsive issues, performance, glitches</p>
+      </div>
+    </div>
+  </div>
+</div>

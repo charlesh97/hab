@@ -1,0 +1,115 @@
+<h2>Layout Direction Confirmed: Map | Video | Telemetry Card | Terminal</h2>
+<p class="subtitle">Single unified telemetry card on the right — refine details before we move on</p>
+
+<div class="mockup">
+  <div class="mockup-header">Unified Telemetry Card — Sections & Content</div>
+  <div class="mockup-body">
+    <div style="background:#0b141c; padding:8px; border-radius:6px; font-family:monospace; font-size:9px; color:#dae3ee; line-height:1.4">
+      <div style="display:grid; grid-template-columns:2fr 3fr 2fr; gap:8px; min-height:400px">
+
+        <!-- Left: Map -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Live Map</div>
+          <div style="background:#2d363e;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Leaflet Map + Balloon Track</div>
+        </div>
+
+        <!-- Center: Video -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Video Feed</div>
+          <div style="background:#0b141c;border:1px dashed #414753;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Stream / Placeholder</div>
+        </div>
+
+        <!-- Right: Unified Telemetry Card -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:0;overflow:hidden;display:flex;flex-direction:column">
+
+          <!-- Card Header -->
+          <div style="background:#141c24;padding:8px 10px;border-bottom:1px solid #414753">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Telemetry</div>
+          </div>
+
+          <!-- Section: Navigation -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Navigation</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:10px">
+              <div><span style="color:#8b919f">ALT</span> <span style="color:#dae3ee;font-size:18px;font-weight:600;line-height:1">24,348</span><span style="color:#8b919f;font-size:10px"> m</span></div>
+              <div><span style="color:#8b919f">GS</span> <span style="color:#dae3ee">9.4</span><span style="color:#8b919f"> m/s</span></div>
+              <div><span style="color:#8b919f">VS</span> <span style="color:#4daa78">+4.2</span><span style="color:#8b919f"> m/s</span></div>
+              <div><span style="color:#8b919f">HDG</span> <span style="color:#dae3ee">045</span><span style="color:#8b919f">&deg;</span></div>
+              <div><span style="color:#8b919f">LAT</span> <span style="color:#dae3ee">34.1234</span><span style="color:#8b919f">&deg;N</span></div>
+              <div><span style="color:#8b919f">LON</span> <span style="color:#dae3ee">118.5678</span><span style="color:#8b919f">&deg;W</span></div>
+              <div><span style="color:#8b919f">SATS</span> <span style="color:#4daa78">11</span></div>
+              <div><span style="color:#8b919f">HDOP</span> <span style="color:#dae3ee">1.2</span></div>
+            </div>
+          </div>
+
+          <!-- Section: Environment -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Environment</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 6px;font-size:10px">
+              <div><span style="color:#8b919f">EXT</span> <span style="color:#dae3ee">-52.3</span><span style="color:#8b919f">&deg;C</span></div>
+              <div><span style="color:#8b919f">INT</span> <span style="color:#dae3ee">+22.1</span><span style="color:#8b919f">&deg;C</span></div>
+              <div><span style="color:#8b919f">PRESS</span> <span style="color:#dae3ee">68.5</span><span style="color:#8b919f">hPa</span></div>
+              <div><span style="color:#8b919f">HUM</span> <span style="color:#dae3ee">12</span><span style="color:#8b919f">%</span></div>
+            </div>
+          </div>
+
+          <!-- Section: Power & Link -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Power & Link</div>
+            <div style="font-size:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span><span style="color:#8b919f">BAT</span> <span style="color:#4daa78;font-size:18px;font-weight:600">88.5</span><span style="color:#8b919f;font-size:10px">%</span></span>
+                <span style="color:#c1c6d5;font-size:9px">12.1V / 0.8A</span>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:4px;font-size:9px">
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>TEL</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>PKT</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#e05344"></span>VID</span>
+                <span style="margin-left:auto;display:flex;align-items:center;gap:3px"><span style="color:#abc7ff;font-size:13px;font-weight:600">12.4</span><span style="color:#8b919f">pkt/s</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Attitude -->
+          <div style="padding:8px 10px">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Attitude</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 6px;font-size:10px">
+              <div><span style="color:#8b919f">ROLL</span> <span style="color:#dae3ee">2.3</span><span style="color:#8b919f">&deg;</span></div>
+              <div><span style="color:#8b919f">PITCH</span> <span style="color:#dae3ee">-1.5</span><span style="color:#8b919f">&deg;</span></div>
+              <div><span style="color:#8b919f">YAW</span> <span style="color:#dae3ee">045</span><span style="color:#8b919f">&deg;</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div style="background:#060f16;border:1px solid #414753;border-radius:6px;margin-top:6px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;min-height:44px">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:4px">&gt; Packet Stream</div>
+        <div style="color:#2f80ed">[14:10:23] POS  lat=34.1234 lon=-118.5678 alt=24348 sats=11</div>
+        <div style="color:#2f80ed">[14:10:22] ENV  ext=-52.3 int=22.1 pres=68.5 hum=12</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>One more thing about the telemetry card</h3>
+  <p class="subtitle">Should card sections be collapsible, or always fully expanded?</p>
+
+  <div class="options">
+    <div class="option" data-choice="static" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Always expanded</h3>
+        <p>All sections visible at all times — no clicking required, at-a-glance monitoring</p>
+      </div>
+    </div>
+    <div class="option" data-choice="collapsible" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Collapsible sections</h3>
+        <p>Click to expand/collapse each section — keeps card compact, focus on what matters</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -3,7 +3,7 @@ import pytest
 from pydantic import ValidationError
 from models import (
     EnvironmentPayload, MotionPayload, PositionPayload, PowerPayload,
-    AccelData, GyroData, AttData, RailsVData,
+    AccelData, GyroData, AttData,
     ReceiverStatus, ReceiverState, SpectrumFrame, ErrorInfo, ErrorCode,
 )
 
@@ -59,7 +59,6 @@ class TestTelemetryPayloads:
         pkt = PowerPayload(
             type="power", bat_v=7.62, bat_a=0.84, bat_w=6.4,
             bat_pct=68, bat_temp_c=8.1,
-            rails_v={"v5": 5.03, "v3v3": 3.31, "v1v8": 1.79},
         )
         assert pkt.bat_pct == 68
 
@@ -68,10 +67,6 @@ class TestSubModels:
     def test_accel_data_from_dict(self):
         a = AccelData(x=0.03, y=-0.08, z=9.71)
         assert a.z == 9.71
-
-    def test_rails_v_from_dict(self):
-        r = RailsVData(v5=5.03, v3v3=3.31, v1v8=1.79)
-        assert r.v3v3 == 3.31
 
 
 class TestReceiverStatus:

@@ -7,13 +7,11 @@ spectrum, and status to the web dashboard over a single WebSocket.
 
 Usage:
     bash launch.sh              # production (port 8000)
-    bash launch.sh --simulate   # simulation mode (no hardware needed)
     python main.py              # dev with reload
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -33,10 +31,10 @@ from routes.rest import create_rest_router
 from routes.ws import create_ws_router
 
 
-def create_app(simulate: bool = False) -> FastAPI:
+def create_app() -> FastAPI:
     receiver_config = ReceiverConfig()
     ws_manager = WebSocketManager()
-    receiver_manager = ReceiverManager(ws_manager, receiver_config, simulate=simulate)
+    receiver_manager = ReceiverManager(ws_manager, receiver_config)
 
     app = FastAPI(title="HAB Receiver Server")
 
@@ -76,13 +74,7 @@ def create_app(simulate: bool = False) -> FastAPI:
     return app
 
 
-# Default: no simulation
-simulate = os.environ.get("HAB_SIMULATE", "").lower() in ("1", "true", "yes")
-# Also check command-line args
-if "--simulate" in sys.argv:
-    simulate = True
-
-app = create_app(simulate=simulate)
+app = create_app()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,254 @@
+<h2>Graph Style: Line-Only + Y-Axis Labels</h2>
+<p class="subtitle">No fill under curve. Y-axis with auto-scaled labels on the right side of each graph.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Telemetry Card — Clean Line Graphs</div>
+  <div class="mockup-body">
+    <div style="background:#0b141c; padding:8px; border-radius:6px; font-family:monospace; font-size:9px; color:#dae3ee; line-height:1.4">
+      <div style="display:grid; grid-template-columns:2fr 3fr 2fr; gap:8px; min-height:460px">
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Live Map</div>
+          <div style="background:#2d363e;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Leaflet Map + Balloon Track</div>
+        </div>
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Video Feed</div>
+          <div style="background:#0b141c;border:1px dashed #414753;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Stream / Placeholder</div>
+        </div>
+
+        <!-- Unified Telemetry Card -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="background:#141c24;padding:8px 10px;border-bottom:1px solid #414753">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Telemetry</div>
+          </div>
+
+          <!-- Navigation -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Navigation</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">ALT</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">24,348</span><span style="color:#8b919f;font-size:7px">m</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,42 L12,38 L24,34 L36,30 L48,26 L60,22 L72,20 L84,18 L96,16 L108,14 L120,15 L132,14 L144,12 L156,14 L168,13 L180,11 L192,14 L204,12 L216,13 L228,11 L240,12" stroke="#2f80ed" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>24.4k</span>
+                    <span>24.3k</span>
+                    <span>24.3k</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">VS</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">+4.2</span><span style="color:#8b919f;font-size:7px">m/s</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <line x1="0" y1="24" x2="240" y2="24" stroke="#414753" stroke-width="0.5" stroke-dasharray="3,3"/>
+                    <path d="M0,26 L12,24 L24,22 L36,20 L48,21 L60,23 L72,22 L84,20 L96,21 L108,19 L120,20 L132,18 L144,19 L156,21 L168,19 L180,20 L192,18 L204,19 L216,20 L228,18 L240,19" stroke="#4daa78" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>5.0</span>
+                    <span>3.5</span>
+                    <span>2.0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;font-size:9px">
+              <div><span style="color:#8b919f">GS</span> <span style="color:#dae3ee">9.4</span><span style="color:#8b919f"> m/s</span></div>
+              <div><span style="color:#8b919f">HDG</span> <span style="color:#dae3ee">045</span><span style="color:#8b919f">&deg;</span></div>
+              <div><span style="color:#8b919f">LAT</span> <span style="color:#dae3ee">34.1234&deg;N</span></div>
+              <div><span style="color:#8b919f">LON</span> <span style="color:#dae3ee">118.5678&deg;W</span></div>
+              <div><span style="color:#8b919f">SATS</span> <span style="color:#4daa78">11</span></div>
+              <div><span style="color:#8b919f">HDOP</span> <span style="color:#dae3ee">1.2</span></div>
+            </div>
+          </div>
+
+          <!-- Environment -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Environment</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">EXT</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">-52.3</span><span style="color:#8b919f;font-size:7px">&deg;C</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,38 L12,36 L24,34 L36,32 L48,30 L60,29 L72,28 L84,27 L96,26 L108,28 L120,25 L132,24 L144,23 L156,25 L168,22 L180,24 L192,21 L204,23 L216,22 L228,20 L240,22" stroke="#2f80ed" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>-50</span>
+                    <span>-52</span>
+                    <span>-54</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">INT</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">+22.1</span><span style="color:#8b919f;font-size:7px">&deg;C</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,18 L12,17 L24,16 L36,18 L48,17 L60,19 L72,18 L84,17 L96,18 L108,16 L120,17 L132,16 L144,17 L156,15 L168,16 L180,15 L192,16 L204,14 L216,15 L228,14 L240,15" stroke="#e05344" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>23</span>
+                    <span>22</span>
+                    <span>21</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">HUM</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">12</span><span style="color:#8b919f;font-size:7px">%</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,26 L12,24 L16,26 L24,28 L36,25 L48,27 L60,26 L72,28 L84,26 L96,29 L108,27 L120,28 L132,26 L144,27 L156,25 L168,27 L180,26 L192,28 L204,27 L216,25 L228,26 L240,25" stroke="#7cd9a3" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>14</span>
+                    <span>12</span>
+                    <span>10</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">PRES</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">68.5</span><span style="color:#8b919f;font-size:7px">hPa</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,34 L12,36 L24,32 L36,34 L48,33 L60,36 L72,35 L84,37 L96,34 L108,36 L120,33 L132,35 L144,32 L156,34 L168,31 L180,33 L192,32 L204,35 L216,33 L228,34 L240,32" stroke="#abc7ff" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>70</span>
+                    <span>69</span>
+                    <span>68</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Power & Link -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Power & Link</div>
+            <div style="font-size:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span><span style="color:#8b919f">BAT</span> <span style="color:#4daa78;font-size:16px;font-weight:600">88.5</span><span style="color:#8b919f;font-size:10px">%</span></span>
+                <span style="color:#c1c6d5;font-size:9px">12.1V / 0.8A</span>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:4px;font-size:9px">
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>TEL</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>PKT</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#e05344"></span>VID</span>
+                <span style="margin-left:auto;display:flex;align-items:center;gap:3px"><span style="color:#abc7ff;font-size:13px;font-weight:600">12.4</span><span style="color:#8b919f">pkt/s</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Attitude -->
+          <div style="padding:8px 10px;">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Attitude</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">ROLL</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">2.3</span><span style="color:#8b919f;font-size:7px">&deg;</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <line x1="0" y1="24" x2="78" y2="24" stroke="#414753" stroke-width="0.5" stroke-dasharray="3,3"/>
+                    <path d="M0,24 L8,22 L16,25 L24,23 L32,24 L40,21 L48,23 L56,25 L64,22 L72,24 L78,22" stroke="#f5be4e" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>3</span>
+                    <span>1</span>
+                    <span>-1</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">PITCH</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">-1.5</span><span style="color:#8b919f;font-size:7px">&deg;</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <line x1="0" y1="24" x2="78" y2="24" stroke="#414753" stroke-width="0.5" stroke-dasharray="3,3"/>
+                    <path d="M0,22 L8,24 L16,26 L24,25 L32,27 L40,24 L48,26 L56,28 L64,25 L72,26 L78,28" stroke="#f5be4e" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>-1</span>
+                    <span>-2</span>
+                    <span>-3</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                  <span style="color:#8b919f;font-size:8px">YAW</span>
+                  <span style="color:#dae3ee;font-size:11px;font-weight:600">045</span><span style="color:#8b919f;font-size:7px">&deg;</span>
+                </div>
+                <div style="background:#141c24;border-radius:3px;height:48px;position:relative;overflow:hidden;display:flex">
+                  <svg width="100%" height="48" style="display:block">
+                    <path d="M0,18 L8,17 L16,19 L24,18 L32,16 L40,18 L48,19 L56,17 L64,18 L72,16 L78,17" stroke="#f5be4e" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                  <div style="position:absolute;right:3px;top:1px;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:6px;color:#414753;text-align:right;padding:2px 0">
+                    <span>45</span>
+                    <span>43</span>
+                    <span>41</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div style="background:#060f16;border:1px solid #414753;border-radius:6px;margin-top:6px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;min-height:44px">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:4px">&gt; Packet Stream</div>
+        <div style="color:#2f80ed">[14:10:23] POS  lat=34.1234 lon=-118.5678 alt=24348 sats=11</div>
+        <div style="color:#2f80ed">[14:10:22] ENV  ext=-52.3 int=22.1 pres=68.5 hum=12</div>
+        <div style="color:#2f80ed">[14:10:21] ATT  roll=2.3 pitch=-1.5 yaw=045</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Graph style summary</h3>
+
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Yes</h4>
+      <ul>
+        <li>Line only — no fill under curve</li>
+        <li>Y-axis labels on right edge (3 ticks, auto-scaled)</li>
+        <li>Zero-line reference on roll/pitch/VS (dashed)</li>
+        <li>Live value in label above graph</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>No</h4>
+      <ul>
+        <li>No gradient fill / area shading</li>
+        <li>No grid lines (clutter)</li>
+        <li>No x-axis labels (it's always "last 60s")</li>
+      </ul>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,239 @@
+<h2>Telemetry Card with Live Streaming Graphs</h2>
+<p class="subtitle">Environment and Attitude sections use inline sparkline-style graphs with live value + 1-min history</p>
+
+<div class="mockup">
+  <div class="mockup-header">Telemetry Card — Graphs Overlay</div>
+  <div class="mockup-body">
+    <div style="background:#0b141c; padding:8px; border-radius:6px; font-family:monospace; font-size:9px; color:#dae3ee; line-height:1.4">
+      <div style="display:grid; grid-template-columns:2fr 3fr 2fr; gap:8px; min-height:440px">
+
+        <!-- Left: Map -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Live Map</div>
+          <div style="background:#2d363e;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Leaflet Map + Balloon Track</div>
+        </div>
+
+        <!-- Center: Video -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:6px">Video Feed</div>
+          <div style="background:#0b141c;border:1px dashed #414753;border-radius:4px;flex:1;display:flex;align-items:center;justify-content:center;color:#8b919f">Stream / Placeholder</div>
+        </div>
+
+        <!-- Right: Unified Telemetry Card -->
+        <div style="background:#182028;border:1px solid #414753;border-radius:6px;overflow:hidden;display:flex;flex-direction:column">
+
+          <!-- Card Header -->
+          <div style="background:#141c24;padding:8px 10px;border-bottom:1px solid #414753">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f">Telemetry</div>
+          </div>
+
+          <!-- Section: Navigation (text-based, no graph needed) -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Navigation</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:10px">
+              <div><span style="color:#8b919f">ALT</span> <span style="color:#dae3ee;font-size:18px;font-weight:600;line-height:1">24,348</span><span style="color:#8b919f"> m</span></div>
+              <div><span style="color:#8b919f">GS</span> <span style="color:#dae3ee">9.4</span><span style="color:#8b919f"> m/s</span></div>
+              <div><span style="color:#8b919f">VS</span> <span style="color:#4daa78">+4.2</span><span style="color:#8b919f"> m/s</span></div>
+              <div><span style="color:#8b919f">HDG</span> <span style="color:#dae3ee">045</span><span style="color:#8b919f">&deg;</span></div>
+              <div><span style="color:#8b919f">LAT</span> <span style="color:#dae3ee">34.1234</span><span style="color:#8b919f">&deg;N</span></div>
+              <div><span style="color:#8b919f">LON</span> <span style="color:#dae3ee">118.5678</span><span style="color:#8b919f">&deg;W</span></div>
+              <div><span style="color:#8b919f">SATS</span> <span style="color:#4daa78">11</span></div>
+              <div><span style="color:#8b919f">HDOP</span> <span style="color:#dae3ee">1.2</span></div>
+            </div>
+          </div>
+
+          <!-- Section: Environment — with sparklines -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Environment</div>
+            
+            <!-- External Temp -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">EXT TEMP</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">-52.3</span><span style="color:#8b919f;font-size:8px">&deg;C</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;margin-bottom:6px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs>
+                  <linearGradient id="et" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#2f80ed" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#2f80ed" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,22 L8,20 L16,18 L24,16 L32,15 L40,14 L48,15 L56,14 L64,11 L72,13 L80,10 L88,9 L96,7 L104,8 L112,6 L120,7 L128,5 L136,8 L144,6 L152,5 L160,7 L168,4 L176,6 L184,5 L192,4 L200,6 L208,5 L216,4 L224,5 L232,3 L240,4 L248,5" stroke="#2f80ed" stroke-width="1.5" fill="url(#et)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#2f80ed;font-weight:600">-52.3</span>
+            </div>
+
+            <!-- Internal Temp -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">INT TEMP</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">+22.1</span><span style="color:#8b919f;font-size:8px">&deg;C</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;margin-bottom:6px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs>
+                  <linearGradient id="it" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#e05344" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#e05344" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,14 L8,13 L16,12 L24,14 L32,13 L40,15 L48,14 L56,12 L64,13 L72,11 L80,12 L88,10 L96,11 L104,12 L112,10 L120,11 L128,9 L136,10 L144,11 L152,9 L160,10 L168,8 L176,9 L184,8 L192,9 L200,10 L208,8 L216,9 L224,7 L232,8 L240,9 L248,7" stroke="#e05344" stroke-width="1.5" fill="url(#it)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#e05344;font-weight:600">+22.1</span>
+            </div>
+
+            <!-- Pressure -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">PRESSURE</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">68.5</span><span style="color:#8b919f;font-size:8px">hPa</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;margin-bottom:6px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs>
+                  <linearGradient id="pr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#abc7ff" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#abc7ff" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,6 L8,8 L16,5 L24,7 L32,6 L40,9 L48,8 L56,10 L64,7 L72,9 L80,6 L88,8 L96,5 L104,7 L112,4 L120,6 L128,5 L136,8 L144,7 L152,9 L160,6 L168,8 L176,5 L184,7 L192,4 L200,6 L208,5 L216,8 L224,6 L232,7 L240,5 L248,8" stroke="#abc7ff" stroke-width="1.5" fill="url(#pr)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#abc7ff;font-weight:600">68.5</span>
+            </div>
+
+            <!-- Humidity -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">HUMIDITY</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">12</span><span style="color:#8b919f;font-size:8px">%</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs>
+                  <linearGradient id="hu" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#7cd9a3" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#7cd9a3" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,18 L8,16 L16,18 L24,20 L32,17 L40,19 L48,18 L56,20 L64,18 L72,21 L80,19 L88,20 L96,18 L104,19 L112,17 L120,19 L128,18 L136,20 L144,18 L152,17 L160,19 L168,18 L176,20 L184,19 L192,17 L200,19 L208,18 L216,20 L224,18 L232,19 L240,17 L248,18" stroke="#7cd9a3" stroke-width="1.5" fill="url(#hu)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#7cd9a3;font-weight:600">12%</span>
+            </div>
+          </div>
+
+          <!-- Section: Power & Link (text-based) -->
+          <div style="padding:8px 10px;border-bottom:1px solid #222b33">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Power & Link</div>
+            <div style="font-size:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span><span style="color:#8b919f">BAT</span> <span style="color:#4daa78;font-size:16px;font-weight:600">88.5</span><span style="color:#8b919f;font-size:10px">%</span></span>
+                <span style="color:#c1c6d5;font-size:9px">12.1V / 0.8A</span>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:4px;font-size:9px">
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>TEL</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#4daa78"></span>PKT</span>
+                <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#e05344"></span>VID</span>
+                <span style="margin-left:auto;display:flex;align-items:center;gap:3px"><span style="color:#abc7ff;font-size:13px;font-weight:600">12.4</span><span style="color:#8b919f">pkt/s</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Attitude — with sparklines -->
+          <div style="padding:8px 10px;">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#448ffd;margin-bottom:6px">Attitude</div>
+            
+            <!-- Roll -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">ROLL</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">2.3</span><span style="color:#8b919f;font-size:8px">&deg;</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;margin-bottom:6px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs><linearGradient id="ro" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f5be4e" stop-opacity="0.3"/><stop offset="100%" stop-color="#f5be4e" stop-opacity="0.02"/></linearGradient></defs>
+                <line x1="0" y1="14" x2="248" y2="14" stroke="#414753" stroke-width="0.5" stroke-dasharray="3,3"/>
+                <path d="M0,14 L8,12 L16,15 L24,13 L32,14 L40,11 L48,13 L56,15 L64,12 L72,14 L80,10 L88,13 L96,11 L104,14 L112,10 L120,13 L128,12 L136,15 L144,13 L152,14 L160,11 L168,13 L176,10 L184,12 L192,14 L200,11 L208,13 L216,10 L224,12 L232,14 L240,11 L248,13" stroke="#f5be4e" stroke-width="1.5" fill="url(#ro)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#f5be4e;font-weight:600">2.3&deg;</span>
+            </div>
+
+            <!-- Pitch -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">PITCH</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">-1.5</span><span style="color:#8b919f;font-size:8px">&deg;</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;margin-bottom:6px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs><linearGradient id="pi" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f5be4e" stop-opacity="0.3"/><stop offset="100%" stop-color="#f5be4e" stop-opacity="0.02"/></linearGradient></defs>
+                <line x1="0" y1="14" x2="248" y2="14" stroke="#414753" stroke-width="0.5" stroke-dasharray="3,3"/>
+                <path d="M0,13 L8,15 L16,14 L24,16 L32,13 L40,15 L48,17 L56,14 L64,16 L72,13 L80,15 L88,18 L96,14 L104,16 L112,13 L120,15 L128,17 L136,14 L144,16 L152,13 L160,15 L168,18 L176,14 L184,16 L192,13 L200,15 L208,17 L216,14 L224,16 L232,13 L240,15 L248,17" stroke="#f5be4e" stroke-width="1.5" fill="url(#pi)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#f5be4e;font-weight:600">-1.5&deg;</span>
+            </div>
+
+            <!-- Yaw -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#8b919f;font-size:9px">YAW</span>
+              <span style="color:#dae3ee;font-size:13px;font-weight:600">045</span><span style="color:#8b919f;font-size:8px">&deg;</span>
+            </div>
+            <div style="background:#141c24;border-radius:3px;height:28px;position:relative;overflow:hidden">
+              <svg width="100%" height="28" style="display:block">
+                <defs><linearGradient id="ya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f5be4e" stop-opacity="0.3"/><stop offset="100%" stop-color="#f5be4e" stop-opacity="0.02"/></linearGradient></defs>
+                <path d="M0,10 L8,9 L16,11 L24,10 L32,8 L40,10 L48,12 L56,9 L64,11 L72,8 L80,10 L88,7 L96,9 L104,11 L112,8 L120,10 L128,7 L136,9 L144,11 L152,8 L160,10 L168,7 L176,9 L184,11 L192,8 L200,10 L208,7 L216,9 L224,8 L232,10 L240,7 L248,9" stroke="#f5be4e" stroke-width="1.5" fill="url(#ya)" stroke-linejoin="round"/>
+              </svg>
+              <span style="position:absolute;right:3px;top:2px;font-size:7px;color:#f5be4e;font-weight:600">045&deg;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div style="background:#060f16;border:1px solid #414753;border-radius:6px;margin-top:6px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;min-height:44px">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:#8b919f;margin-bottom:4px">&gt; Packet Stream</div>
+        <div style="color:#2f80ed">[14:10:23] POS  lat=34.1234 lon=-118.5678 alt=24348 sats=11</div>
+        <div style="color:#2f80ed">[14:10:22] ENV  ext=-52.3 int=22.1 pres=68.5 hum=12</div>
+        <div style="color:#2f80ed">[14:10:21] ATT  roll=2.3 pitch=-1.5 yaw=045</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>How this works</h4>
+    <ul>
+      <li>Each metric gets a compact sparkline (28px tall)</li>
+      <li>Live value displayed to the right of the label</li>
+      <li>1-minute window of streaming data with gradient fill</li>
+      <li>Recharts AreaChart for implementation (already in deps)</li>
+      <li>Zero-axis reference line on roll/pitch for visual clarity</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>What's NOT graphed</h4>
+    <ul>
+      <li>Navigation (lat/lon/alt/gs/vs/hdg/sats/hdop) — text remains</li>
+      <li>Power (bat%/V/A) — text remains, could add battery trend later</li>
+      <li>Link status (TEL/PKT/VID dots) — text remains</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Does this match what you had in mind?</h3>
+  <p class="subtitle">Any metrics you'd also want as graphs, or any you'd prefer keeping as text?</p>
+
+  <div class="options">
+    <div class="option" data-choice="yes" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Looks good as shown</h3>
+        <p>Environment (4 sparklines) + Attitude (3 sparklines) — the rest stays text</p>
+      </div>
+    </div>
+    <div class="option" data-choice="more" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>I'd also want graphs for...</h3>
+        <p>Tell me which other metrics you'd like to see as streaming graphs</p>
+      </div>
+    </div>
+  </div>
+</div>

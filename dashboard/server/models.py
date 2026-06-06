@@ -25,11 +25,6 @@ class AttData(BaseModel):
     yaw: float
 
 
-class RailsVData(BaseModel):
-    v5: float
-    v3v3: float
-    v1v8: float
-
 
 class EnvironmentPayload(BaseModel):
     type: Literal["environment"]
@@ -71,7 +66,6 @@ class PowerPayload(BaseModel):
     bat_w: float
     bat_pct: int
     bat_temp_c: float
-    rails_v: RailsVData
 
 
 class ReceiverState(str, Enum):
