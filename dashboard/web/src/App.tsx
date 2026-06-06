@@ -21,8 +21,8 @@ export function App() {
     logEntries,
     packetRate,
     lastPacketAge,
-    packetSeq,
-    engineStatus,
+    metricHistory,
+    newLinkStatus,
   } = useHabApi();
 
   useEffect(() => {
@@ -59,15 +59,10 @@ export function App() {
           motion={motion}
           environment={environment}
           power={power}
-          linkStatus={{
-            telemetry: connected ? 'NOMINAL' : 'OFFLINE',
-            packet: connected ? 'NOMINAL' : 'OFFLINE',
-            video: engineStatus?.pipeline?.running ? 'NOMINAL' : 'OFFLINE',
-          }}
+          linkStatus={newLinkStatus}
           packetRate={packetRate}
-          sequence={packetSeq}
           logEntries={logEntries}
-          lastPacketAge={lastPacketAge}
+          metricHistory={metricHistory}
         />
       )}
 

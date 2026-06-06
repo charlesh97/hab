@@ -1,12 +1,6 @@
 import { MapCard } from './MapCard';
-import { PositionCard } from './PositionCard';
-import { MotionCard } from './MotionCard';
-import { EnvironmentCard } from './EnvironmentCard';
 import { CameraFeed } from './CameraFeed';
-import { RfLinkCard } from './RfLinkCard';
-import { PowerCard } from './PowerCard';
-import { AlertsCard } from './AlertsCard';
-import { PacketRateCard } from './PacketRateCard';
+import { TelemetryCard } from './TelemetryCard';
 import { PacketStream } from './PacketStream';
 import {
   PositionData,
@@ -15,6 +9,7 @@ import {
   PowerData,
   LinkStatus,
   LogEntry,
+  MetricPoint,
 } from '../types';
 
 interface MissionControlProps {
@@ -24,9 +19,18 @@ interface MissionControlProps {
   power: PowerData;
   linkStatus: LinkStatus;
   packetRate: number;
-  sequence: number;
   logEntries: LogEntry[];
-  lastPacketAge: number;
+  metricHistory: {
+    altitude: MetricPoint[];
+    verticalSpeed: MetricPoint[];
+    externalTemp: MetricPoint[];
+    internalTemp: MetricPoint[];
+    pressure: MetricPoint[];
+    humidity: MetricPoint[];
+    roll: MetricPoint[];
+    pitch: MetricPoint[];
+    yaw: MetricPoint[];
+  };
 }
 
 export function MissionControl({
@@ -36,32 +40,33 @@ export function MissionControl({
   power,
   linkStatus,
   packetRate,
-  sequence,
   logEntries,
-  lastPacketAge,
+  metricHistory,
 }: MissionControlProps) {
   return (
     <>
-      <main className="ml-[64px] mt-[72px] h-[calc(100vh-272px)] p-4 grid grid-cols-[340px_1fr_350px] gap-4">
-        {/* Left Column */}
-        <section className="flex flex-col gap-4 overflow-hidden">
+      <main className="ml-[64px] mt-[72px] h-[calc(100vh-272px)] p-4 grid grid-cols-[2fr_3fr_2fr] gap-4">
+        {/* Left Column: Map */}
+        <section className="overflow-hidden">
           <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} />
-          <PositionCard position={position} />
-          <MotionCard motion={motion} />
-          <EnvironmentCard environment={environment} />
         </section>
 
-        {/* Center Column */}
-        <section className="flex flex-col gap-4">
+        {/* Center Column: Video Feed */}
+        <section className="overflow-hidden">
           <CameraFeed />
         </section>
 
-        {/* Right Column */}
-        <section className="flex flex-col gap-4 overflow-hidden">
-          <RfLinkCard linkStatus={linkStatus} />
-          <PowerCard power={power} />
-          <AlertsCard lastPacketAge={lastPacketAge} linkMargin={11} />
-          <PacketRateCard rate={packetRate} sequence={sequence} />
+        {/* Right Column: Unified Telemetry Card */}
+        <section className="overflow-hidden">
+          <TelemetryCard
+            position={position}
+            motion={motion}
+            environment={environment}
+            power={power}
+            linkStatus={linkStatus}
+            packetRate={packetRate}
+            metricHistory={metricHistory}
+          />
         </section>
       </main>
 
