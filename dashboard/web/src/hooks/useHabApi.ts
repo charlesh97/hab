@@ -382,6 +382,17 @@ export function useHabApi() {
     setMetricHistory({ ...metricHistoryRef.current });
   }
 
+  const loadPositions = useCallback(async (since: number = 0): Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>> => {
+    try {
+      const host = window.location.hostname;
+      const res = await fetch(`http://${host}:8000/api/positions?since=${since}&limit=5000`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }, []);
+
   return {
     connected,
     connecting,
@@ -406,5 +417,6 @@ export function useHabApi() {
     lastPacketAge,
     packetSeq,
     metricHistory,
+    loadPositions,
   };
 }
