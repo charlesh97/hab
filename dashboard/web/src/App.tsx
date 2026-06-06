@@ -16,7 +16,6 @@ export function App() {
     missionTime,
     position,
     motion,
-    environment,
     power,
     logEntries,
     packetRate,
@@ -57,7 +56,6 @@ export function App() {
         <MissionControl
           position={position}
           motion={motion}
-          environment={environment}
           power={power}
           linkStatus={newLinkStatus}
           packetRate={packetRate}

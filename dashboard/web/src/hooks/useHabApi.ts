@@ -6,25 +6,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   TelemetrySample, FlightPhase, Packet, LinkStatus,
   PositionData, MotionData, EnvironmentData, PowerData,
-  LogEntry, TelemetryMessage, MetricPoint,
+  LogEntry, TelemetryMessage, MetricPoint, ConnectionLogEntry,
 } from '../types';
-
-export interface ConnectionLogEntry {
-  timestamp: number;
-  message: string;
-  type: 'info' | 'error' | 'warning';
-}
-
-interface EngineStatus {
-  running: boolean;
-  tx_active: boolean;
-  device_connected: boolean;
-  device_serial?: string;
-  frequency: number;
-  symbol_rate: number;
-  uptime_sec: number;
-  pipeline: { running: boolean; file_path: string; bitrate: number } | null;
-}
+import { EngineStatus } from '../types';
 
 interface WsMessage {
   type: string;

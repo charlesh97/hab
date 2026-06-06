@@ -1,7 +1,6 @@
 import {
   PositionData,
   MotionData,
-  EnvironmentData,
   PowerData,
   LinkStatus,
   MetricPoint,
@@ -11,7 +10,6 @@ import { SparklineGraph } from './SparklineGraph';
 interface TelemetryCardProps {
   position: PositionData;
   motion: MotionData;
-  environment: EnvironmentData;
   power: PowerData;
   linkStatus: LinkStatus;
   packetRate: number;

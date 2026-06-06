@@ -5,7 +5,6 @@ import { PacketStream } from './PacketStream';
 import {
   PositionData,
   MotionData,
-  EnvironmentData,
   PowerData,
   LinkStatus,
   LogEntry,
@@ -15,7 +14,6 @@ import {
 interface MissionControlProps {
   position: PositionData;
   motion: MotionData;
-  environment: EnvironmentData;
   power: PowerData;
   linkStatus: LinkStatus;
   packetRate: number;
@@ -36,7 +34,6 @@ interface MissionControlProps {
 export function MissionControl({
   position,
   motion,
-  environment,
   power,
   linkStatus,
   packetRate,
@@ -61,7 +58,6 @@ export function MissionControl({
           <TelemetryCard
             position={position}
             motion={motion}
-            environment={environment}
             power={power}
             linkStatus={linkStatus}
             packetRate={packetRate}
