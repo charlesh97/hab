@@ -1,6 +1,8 @@
 # receiver-server/routes/rest.py
 """REST endpoints — health check, packet query, device enumeration."""
 
+import json
+import sqlite3
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -47,6 +49,33 @@ def create_rest_router(receiver_manager=None, ws_manager=None):
             await receiver_manager.ingest_packet(data)
 
         return {"status": "ok", "seq": pkt_seq}
+
+    @router.get("/api/positions")
+    async def get_positions(since: int = Query(0), limit: int = Query(5000)):
+        """Return position packets from SQLite for map trail rendering."""
+        if receiver_manager is None or receiver_manager._db_conn is None:
+            return []
+        try:
+            conn = receiver_manager._db_conn
+            rows = conn.execute(
+                "SELECT seq, received_at, payload FROM packets "
+                "WHERE type = 'position' AND seq > ? "
+                "ORDER BY seq ASC LIMIT ?",
+                (since, limit),
+            ).fetchall()
+            result = []
+            for seq, received_at, payload_str in rows:
+                payload = json.loads(payload_str)
+                result.append({
+                    "seq": seq,
+                    "received_at": received_at,
+                    "lat": payload.get("lat", 0),
+                    "lon": payload.get("lon", 0),
+                    "alt_m": payload.get("alt_m", 0),
+                })
+            return result
+        except Exception:
+            return []
 
     @router.get("/api/devices")
     async def list_devices():
