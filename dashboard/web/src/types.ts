@@ -36,7 +36,6 @@ export interface PowerData {
   bat_w: number;
   bat_pct: number;
   bat_temp_c: number;
-  rails_v: { v5: number; v3v3: number; v1v8: number };
 }
 
 export interface TelemetryPacket {
@@ -138,4 +137,9 @@ export interface ConnectionLogEntry {
   timestamp: number;
   message: string;
   type: 'info' | 'error' | 'warning';
+}
+
+export interface MetricPoint {
+  timestamp: number;
+  value: number;
 }

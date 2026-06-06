@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   TelemetrySample, FlightPhase, Packet, LinkStatus,
   PositionData, MotionData, EnvironmentData, PowerData,
-  LogEntry, TelemetryMessage,
+  LogEntry, TelemetryMessage, MetricPoint,
 } from '../types';
 
 export interface ConnectionLogEntry {
@@ -86,7 +86,7 @@ export function useHabApi() {
   });
   const [power, setPower] = useState<PowerData>({
     bat_v: 7.62, bat_a: 0.84, bat_w: 6.4, bat_pct: 68,
-    bat_temp_c: 8.1, rails_v: { v5: 5.03, v3v3: 3.31, v1v8: 1.79 },
+    bat_temp_c: 8.1,
   });
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [packetRate, _setPacketRate] = useState(2.4);
@@ -94,6 +94,30 @@ export function useHabApi() {
   void packetRateHistory;
   const [lastPacketAge, _setLastPacketAge] = useState(1.2);
   const [packetSeq, setPacketSeq] = useState(18430);
+
+  const metricHistoryRef = useRef<{
+    altitude: MetricPoint[];
+    verticalSpeed: MetricPoint[];
+    externalTemp: MetricPoint[];
+    internalTemp: MetricPoint[];
+    pressure: MetricPoint[];
+    humidity: MetricPoint[];
+    roll: MetricPoint[];
+    pitch: MetricPoint[];
+    yaw: MetricPoint[];
+  }>({
+    altitude: [],
+    verticalSpeed: [],
+    externalTemp: [],
+    internalTemp: [],
+    pressure: [],
+    humidity: [],
+    roll: [],
+    pitch: [],
+    yaw: [],
+  });
+
+  const [metricHistory, setMetricHistory] = useState<typeof metricHistoryRef.current>(metricHistoryRef.current);
 
   const addLogEntry = useCallback((timestamp: string, type: LogEntry['type'], payload: string) => {
     setLogEntries((prev) => {
@@ -156,12 +180,21 @@ export function useHabApi() {
 
               if (data.type === 'position') {
                 setPosition(data);
+                pushMetric('altitude', data.alt_m);
                 addLogEntry(time, 'POS', `lat:${data.lat.toFixed(5)} lon:${data.lon.toFixed(5)} alt:${data.alt_m.toFixed(0)}m sats:${data.sats} fix:${data.fix_type}`);
               } else if (data.type === 'motion') {
                 setMotion(data);
+                pushMetric('verticalSpeed', data.vs_mps);
+                pushMetric('roll', data.att_deg.roll);
+                pushMetric('pitch', data.att_deg.pitch);
+                pushMetric('yaw', data.att_deg.yaw);
                 addLogEntry(time, 'MOT', `gs:${data.gs_mps.toFixed(1)} vs:${data.vs_mps.toFixed(1)} hdg:${data.heading_deg.toFixed(1)}`);
               } else if (data.type === 'environment') {
                 setEnvironment(data);
+                pushMetric('externalTemp', data.temp_ext_c);
+                pushMetric('internalTemp', data.temp_int_c);
+                pushMetric('pressure', data.pressure_hpa);
+                pushMetric('humidity', data.humidity_pct);
                 addLogEntry(time, 'ENV', `ext:${data.temp_ext_c.toFixed(1)}°C int:${data.temp_int_c.toFixed(1)}°C pres:${data.pressure_hpa.toFixed(1)}hPa hum:${data.humidity_pct.toFixed(1)}%`);
               } else if (data.type === 'power') {
                 setPower(data);
@@ -222,6 +255,8 @@ export function useHabApi() {
                 const next = [...prev, { id: `PKT-${data.seq}`, timestamp: now, type: 'TELEMETRY', payload: JSON.stringify(data) }];
                 return next.length > 200 ? next.slice(next.length - 200) : next;
               });
+
+              flushMetricHistory();
             }
           } catch (e) {
             // Parse errors are debug-only
@@ -349,6 +384,20 @@ export function useHabApi() {
     }));
   }, [engineStatus?.pipeline?.running]);
 
+  const ROLLING_WINDOW_MS = 60_000;
+
+  function pushMetric(key: keyof typeof metricHistoryRef.current, value: number) {
+    const now = Date.now();
+    const buf = metricHistoryRef.current;
+    const arr = [...buf[key], { timestamp: now, value }];
+    const cutoff = now - ROLLING_WINDOW_MS;
+    buf[key] = arr.filter((p) => p.timestamp >= cutoff);
+  }
+
+  function flushMetricHistory() {
+    setMetricHistory({ ...metricHistoryRef.current });
+  }
+
   return {
     connected,
     connecting,
@@ -372,5 +421,6 @@ export function useHabApi() {
     packetRate,
     lastPacketAge,
     packetSeq,
+    metricHistory,
   };
 }
