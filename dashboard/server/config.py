@@ -14,6 +14,7 @@ class ServerConfig:
     status_interval_sec: float = 1.0
     spectrum_points: int = 256
     spectrum_chunk_interval: int = 20
+    database_path: str = "hab_data.db"
 
 
 @dataclass
