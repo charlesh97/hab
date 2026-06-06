@@ -17,7 +17,7 @@ else
 fi
 
 # Add rf-link libraries to path
-export PYTHONPATH="${HAB_ROOT}/rf-link/packet/src:${HAB_ROOT}/rf-link/dvbs2:${PYTHONPATH:-}"
+export PYTHONPATH="${HAB_ROOT}/rf/packet/src:${HAB_ROOT}/rf/dvbs2:${PYTHONPATH:-}"
 
 # Add Homebrew site-packages (for SoapySDR, which is installed via brew not pip)
 export PYTHONPATH="/opt/homebrew/lib/python3.14/site-packages:${PYTHONPATH}"

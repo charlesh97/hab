@@ -36,7 +36,7 @@ A professional ground station application for high-altitude balloon (HAB) DVB-S2
 ### 1. Setup Environment
 
 ```bash
-cd ~/Documents/git/hab/rf-link
+cd ~/Documents/git/hab/rf
 source setup_env.sh
 ```
 
@@ -107,7 +107,7 @@ For QPSK 1/2 at 1 Msym/s with pilots ON:
 
 ## Available Commands
 
-### CLI Tools (rf-link/dvbs2/)
+### CLI Tools (rf/dvbs2/)
 
 ```bash
 # File-to-file test
@@ -144,7 +144,7 @@ bash test_ota.sh
 
 ```
 hab/
-├── rf-link/
+├── rf/
 │   ├── dvbs2/              # CLI DVB-S2 tools
 │   │   ├── tx.py           # Transmitter (HackRF/USRP/BladeRF)
 │   │   ├── rx.py           # Receiver (HackRF/RTL-SDR/USRP)
@@ -187,7 +187,7 @@ hab/
 
 | Issue | Likely Fix |
 |-------|-----------|
-| "No module named 'gnuradio'" | Run `source rf-link/setup_env.sh` |
+| "No module named 'gnuradio'" | Run `source rf/setup_env.sh` |
 | HackRF not found | Check USB, run `hackrf_info` |
 | No carrier lock | Increase TX gain, check antennas, verify frequency matches |
 | High FER | Decrease symbol rate, increase TX power |

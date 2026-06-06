@@ -76,13 +76,13 @@ Commands (macOS → Engine):
 ## Module Structure
 
 ```
-hab-gui/python/
+gui/python/
 ├── main.py                 # Entry point, creates engine + window
 ├── connection_tab.py       # HackRF discovery + connection UI
 ├── dvbs2_tx_tab.py         # DVBS2 video transmission tab
 ├── telemetry_tab.py        # Telemetry RX + spectrum analyzer tab
 ├── dvbs2_flowgraph.py      # Embedded GNU Radio flowgraph (FIXED)
-├── dvbs2_tx.py             # Reference standalone flowgraph (from rf-link/dvbs2)
+├── dvbs2_tx.py             # Reference standalone flowgraph (from rf/dvbs2)
 ├── telemetry_rx.py         # Telemetry receiver flowgraph
 │
 ├── hab_engine/             # Core engine package

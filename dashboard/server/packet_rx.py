@@ -1,11 +1,11 @@
 # receiver-server/packet_rx.py
-"""Packet receiver — wraps rf-link/packet/src/ as an async bridge.
+"""Packet receiver — wraps rf/packet/src/ as an async bridge.
 
 ReceiverWorker: synchronous SDR manager + signal processing pipeline.
 AsyncPacketReceiver: async bridge using run_in_executor for SDR I/O.
 
 The packet_codec import is lazy (function-level) so tests can import
-without the rf-link/packet/src/ directory on PYTHONPATH.
+without the rf/packet/src/ directory on PYTHONPATH.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from config import ReceiverConfig
 class ReceiverWorker:
     """Synchronous SDR manager + signal processing pipeline.
 
-    Uses packet_codec and fec_cc from rf-link/packet/src/ for FEC/CRC.
+    Uses packet_codec and fec_cc from rf/packet/src/ for FEC/CRC.
     Wraps SoapySDR for HackRF control.
     """
 
@@ -100,7 +100,7 @@ class ReceiverWorker:
 
     def _decode(self, samples: np.ndarray) -> dict | None:
         """Decode IQ samples into a packet dict (or None if no valid packet)."""
-        # Lazy import — test isolation when rf-link/packet/src/ is not on path
+        # Lazy import — test isolation when rf/packet/src/ is not on path
         from packet_codec import packet_decode
 
         samples = samples - np.mean(samples)

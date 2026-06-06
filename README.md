@@ -21,7 +21,7 @@ This project builds a high‑altitude balloon payload and matching ground statio
 
 ### Ground Station
 - HackRF SDR receiver
-- Custom GUI in `hab-gui/` to:
+- Custom GUI in `gui/` to:
   - Demodulate DVB‑S2 video
   - Demodulate QPSK telemetry packets
   - Provide real‑time spectrum analysis and monitoring
@@ -30,15 +30,15 @@ This project builds a high‑altitude balloon payload and matching ground statio
 ## Repository Structure (empty, still building out)
 ```
 hab/
-├── hab-gui/          # Ground station GUI (PySide6 + GNU Radio + SoapySDR)
-├── hab-esp32/        # ESP32 + Zephyr RTOS firmware (sensors/control as needed)
-├── rf-link/          # RF link utilities, GNU Radio graphs, tools
+├── gui/          # Ground station GUI (PySide6 + GNU Radio + SoapySDR)
+├── firmware/        # ESP32 + Zephyr RTOS firmware (sensors/control as needed)
+├── rf/          # RF link utilities, GNU Radio graphs, tools
 ├── mechanical/       # Mechanical designs and enclosure files
 ├── photos/           # Project photos and documentation images
 └── README.md         # This file
 ```
 
-Refer to `hab-gui/README.md` for detailed ground‑station setup (GNU Radio, SoapySDR, HackRF) and run instructions.
+Refer to `gui/README.md` for detailed ground‑station setup (GNU Radio, SoapySDR, HackRF) and run instructions.
 
 ## Current Status
 - ✅ Ground station GUI scaffolding complete; HackRF integration in place
@@ -60,7 +60,7 @@ Refer to `hab-gui/README.md` for detailed ground‑station setup (GNU Radio, Soa
 - MPU6050 (or ICM‑20948) — IMU 6‑9 DOF (I2C/SPI)
 
 ## Getting Started (Ground Station)
-1. See `hab-gui/README.md` for system dependencies (Homebrew installs), venv setup, and running the app
+1. See `gui/README.md` for system dependencies (Homebrew installs), venv setup, and running the app
 2. Connect HackRF, configure frequency/sample rate/gains in the Connection tab
 3. Start reception in the Telemetry tab; verify spectrum and packet flow
 

@@ -3,11 +3,11 @@
 # Tests: file-to-file loopback, OTA link, WebSocket server
 #
 # Usage:
-#   source ../rf-link/venv/bin/activate
+#   source ../rf/venv/bin/activate
 #   bash test_ota.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RF_LINK_DIR="$SCRIPT_DIR/../../rf-link"
+RF_LINK_DIR="$SCRIPT_DIR/../../rf"
 
 set -e
 

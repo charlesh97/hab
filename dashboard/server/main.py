@@ -17,9 +17,9 @@ import os
 import sys
 from pathlib import Path
 
-HAB_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(HAB_ROOT / "rf-link" / "packet" / "src"))
-sys.path.insert(0, str(HAB_ROOT / "rf-link" / "dvbs2"))
+HAB_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(HAB_ROOT / "rf" / "packet" / "src"))
+sys.path.insert(0, str(HAB_ROOT / "rf" / "dvbs2"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,7 +55,7 @@ def create_app(simulate: bool = False) -> FastAPI:
     app.include_router(create_ws_router(ws_manager, receiver_manager))
 
     # Serve dashboard static files (built React SPA)
-    dist_dir = HAB_ROOT / "web-dashboard" / "dist"
+    dist_dir = HAB_ROOT / "dashboard" / "web" / "dist"
     if dist_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="assets")
 

@@ -5,7 +5,7 @@ Tests the HabEngine, PipelineManager, WebSocket server,
 and DVB-S2 flowgraph import without hardware.
 
 Usage:
-    source ../rf-link/setup_env.sh
+    source ../rf/setup_env.sh
     python test_engine.py
 """
 
@@ -112,7 +112,7 @@ def run_tests():
 
     # ── 10. DVBS2 Module Test (file-to-file via CLI) ──
     print("\n10. DVBS2 CLI Tool Check")
-    rf_link = os.path.expanduser("~/Documents/git/hab/rf-link")
+    rf_link = os.path.expanduser("~/Documents/git/hab/rf")
     tx_path = os.path.join(rf_link, "dvbs2/tx.py")
     rx_path = os.path.join(rf_link, "dvbs2/rx.py")
     test("tx.py exists", os.path.exists(tx_path))

@@ -5,8 +5,8 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Source rf-link environment for GNU Radio + SoapySDR
-RF_LINK_DIR="$SCRIPT_DIR/../../rf-link"
+# Source rf environment for GNU Radio + SoapySDR
+RF_LINK_DIR="$SCRIPT_DIR/../../rf"
 if [ -f "$RF_LINK_DIR/setup_env.sh" ]; then
     source "$RF_LINK_DIR/setup_env.sh" 2>/dev/null
 fi
