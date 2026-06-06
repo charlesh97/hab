@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import sqlite3
 import time
 from collections import deque
+from datetime import datetime, timezone
 
 from models import ReceiverState, SpectrumFrame
 from config import ReceiverConfig
@@ -17,7 +20,7 @@ class InvalidStateError(Exception):
 
 
 class ReceiverManager:
-    def __init__(self, ws_manager, config: ReceiverConfig):
+    def __init__(self, ws_manager, config: ReceiverConfig, db_path: str | None = None):
         self._ws = ws_manager
         self._config = config
         self._state = ReceiverState.IDLE
@@ -29,6 +32,19 @@ class ReceiverManager:
         self._packets_valid = 0
         self._spectrum_frame = None
         self._start_time: float | None = None
+        self._db_path = db_path
+        self._db_conn: sqlite3.Connection | None = None
+        if db_path:
+            self._db_conn = sqlite3.connect(str(db_path))
+            self._db_conn.execute(
+                "CREATE TABLE IF NOT EXISTS packets ("
+                "  seq INTEGER PRIMARY KEY,"
+                "  received_at TEXT NOT NULL,"
+                "  type TEXT NOT NULL,"
+                "  payload TEXT NOT NULL"
+                ")"
+            )
+            self._db_conn.commit()
 
     @property
     def state(self) -> ReceiverState:
@@ -104,10 +120,14 @@ class ReceiverManager:
         self._packets_total += 1
         self._packets_valid += 1
         await self._ws.broadcast({"type": "telemetry", "data": packet})
+        self._save_packet(packet)
 
     async def _cleanup(self):
         self._stop_receiver()
         self._receiver = None
+        if self._db_conn:
+            self._db_conn.close()
+            self._db_conn = None
         if self._status_task and not self._status_task.done():
             self._status_task.cancel()
             try:
@@ -133,3 +153,24 @@ class ReceiverManager:
             "error_count": 0,
             "last_error": "",
         }
+
+    def _save_packet(self, packet: dict):
+        if self._db_conn is None:
+            return
+        try:
+            self._db_conn.execute(
+                "INSERT OR REPLACE INTO packets (seq, received_at, type, payload) VALUES (?, ?, ?, ?)",
+                (
+                    packet.get("seq", 0),
+                    datetime.now(timezone.utc).isoformat(),
+                    packet.get("type", "unknown"),
+                    json.dumps(packet),
+                ),
+            )
+            self._db_conn.commit()
+        except Exception:
+            import logging
+            logging.getLogger("receiver_manager").warning(
+                "Failed to write packet seq=%s to database", packet.get("seq"),
+                exc_info=True,
+            )
