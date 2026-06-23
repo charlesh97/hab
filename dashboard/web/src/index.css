@@ -34,10 +34,73 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
-/* Leaflet overrides (kept for compatibility if used later) */
+/* Dark theme Leaflet overrides */
 .leaflet-container {
-  background: #f8fafc !important;
+  background: #1a1a2e !important;
   font-family: 'Inter', sans-serif !important;
+}
+
+/* Dark attribution bar to match the dashboard theme */
+.leaflet-control-attribution {
+  background: rgba(11, 20, 28, 0.8) !important;
+  color: #8b919f !important;
+  font-size: 10px !important;
+  border-top: 1px solid rgba(65, 71, 83, 0.3) !important;
+  padding: 2px 6px !important;
+}
+.leaflet-control-attribution a {
+  color: #abc7ff !important;
+}
+.leaflet-control-attribution a:hover {
+  color: #448ffd !important;
+  text-decoration: underline !important;
+}
+
+/* Dark zoom controls to match theme */
+.leaflet-control-zoom {
+  border: 1px solid rgba(65, 71, 83, 0.5) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+.leaflet-control-zoom a {
+  background: rgba(11, 20, 28, 0.9) !important;
+  color: #dae3ee !important;
+  border-bottom: 1px solid rgba(65, 71, 83, 0.3) !important;
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  font-size: 16px !important;
+  transition: background 0.15s ease !important;
+}
+.leaflet-control-zoom a:hover {
+  background: rgba(34, 43, 51, 0.9) !important;
+  color: #abc7ff !important;
+}
+.leaflet-control-zoom a.leaflet-disabled {
+  color: #414753 !important;
+}
+
+/* Locate balloon button — matches zoom controls */
+.leaflet-control-locate {
+  margin-top: 4px !important;
+}
+.leaflet-control-locate a {
+  background: rgba(11, 20, 28, 0.9) !important;
+  color: #dae3ee !important;
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  transition: background 0.15s ease !important;
+  text-decoration: none !important;
+}
+.leaflet-control-locate a:hover {
+  background: rgba(34, 43, 51, 0.9) !important;
+  color: #abc7ff !important;
 }
 
 body {

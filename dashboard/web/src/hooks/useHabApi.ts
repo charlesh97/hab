@@ -30,21 +30,21 @@ const MAX_LOG_ENTRIES = 500;
 export function useHabApi() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(true);
-  const [phase, setPhase] = useState<FlightPhase>('ASCENT');
+  const [phase, setPhase] = useState<FlightPhase>('PRE-LAUNCH');
   const [missionTime, setMissionTime] = useState(0);
   const [current, setCurrent] = useState<TelemetrySample>({
     timestamp: Date.now(),
-    altitude: 18500,
-    verticalSpeed: 4.8,
-    groundSpeed: 22.5,
-    heading: 85,
-    internalTemp: 15.2,
-    externalTemp: -56.5,
-    pressure: 68.5,
-    battery: 88.5,
-    gpsSats: 11,
-    lat: 39.05,
-    lng: -105.5,
+    altitude: 0,
+    verticalSpeed: 0,
+    groundSpeed: 0,
+    heading: 0,
+    internalTemp: 0,
+    externalTemp: 0,
+    pressure: 0,
+    battery: 0,
+    gpsSats: 0,
+    lat: 0,
+    lng: 0,
   });
   const [history, setHistory] = useState<TelemetrySample[]>([]);
   const [packets, setPackets] = useState<Packet[]>([]);
@@ -114,6 +114,7 @@ export function useHabApi() {
   const currentRef = useRef(current);
   const prevEngineStatusRef = useRef<EngineStatus | null>(null);
   const addLogEntryRef = useRef<(message: string, type: ConnectionLogEntry['type']) => void>(() => {});
+  const missionStartRef = useRef<number | null>(null);
 
   addLogEntryRef.current = useCallback((message: string, type: ConnectionLogEntry['type']) => {
     setConnectionLog((prev) => {
@@ -158,6 +159,10 @@ export function useHabApi() {
               setSpectrum(msg.data);
             } else if (msg.type === 'telemetry') {
               const data: TelemetryMessage = msg.data;
+              // Start mission timer on first telemetry packet
+              if (missionStartRef.current === null) {
+                missionStartRef.current = Date.now();
+              }
               setPacketSeq(data.seq);
 
               const time = data.t.split('T')[1]?.substring(0, 8) || new Date().toISOString().substring(11, 19);
@@ -317,6 +322,16 @@ export function useHabApi() {
 
     prevEngineStatusRef.current = engineStatus;
   }, [engineStatus]);
+
+  // 1-second tick: derive missionTime from wall clock since first telemetry packet
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (missionStartRef.current !== null) {
+        setMissionTime(Math.floor((Date.now() - missionStartRef.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const sendCommand = useCallback((command: string, data?: any) => {
     // Map command names to receiver-server message types

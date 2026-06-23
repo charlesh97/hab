@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 import L from 'leaflet';
 
@@ -26,6 +26,45 @@ function formatLatLng(lat: number, lon: number): string {
   const latDir = lat >= 0 ? 'N' : 'S';
   const lonDir = lon >= 0 ? 'E' : 'W';
   return `${Math.abs(lat).toFixed(4)}°${latDir} ${Math.abs(lon).toFixed(4)}°${lonDir}`;
+}
+
+/** Custom Leaflet control: locate balloon button below zoom controls. */
+function LocateButton({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  const latRef = useRef(lat);
+  const lonRef = useRef(lon);
+  latRef.current = lat;
+  lonRef.current = lon;
+
+  useEffect(() => {
+    const LocateCtrl = L.Control.extend({
+      onAdd: function () {
+        const div = L.DomUtil.create('div', 'leaflet-control-locate leaflet-bar leaflet-control');
+        div.innerHTML = `<a class="leaflet-control-locate-btn" href="#" title="Locate balloon" role="button" aria-label="Locate balloon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
+        </a>`;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.on(div, 'click', function (e) {
+          L.DomEvent.preventDefault(e);
+          map.flyTo([latRef.current, lonRef.current], Math.max(map.getZoom(), 10), { duration: 0.8 });
+        });
+        return div;
+      },
+    });
+
+    const control = new LocateCtrl({ position: 'topleft' });
+    map.addControl(control);
+    return () => { map.removeControl(control); };
+  }, [map]);
+
+  return null;
 }
 
 export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
@@ -87,7 +126,7 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
   }, [trail, lat, lon]);
 
   return (
-    <div className="card-border bg-surface-container-low rounded-[20px] border border-outline-variant flex flex-col h-[35%] min-h-[200px]">
+    <div className="card-border bg-surface-container-low rounded-[20px] border border-outline-variant flex flex-col h-full min-h-[200px]">
       <div className="p-3 border-b border-outline-variant flex justify-between items-center">
         <span className="data-label text-label-caps text-outline">LIVE MAP</span>
         <span className="text-[10px] font-mono text-outline">
@@ -99,7 +138,7 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
           center={center}
           zoom={5}
           className="h-full w-full"
-          zoomControl={false}
+          zoomControl={true}
           ref={mapRef}
           style={{ background: '#1a1a2e' }}
         >
@@ -119,6 +158,7 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
               </div>
             </Popup>
           </CircleMarker>
+          <LocateButton lat={lat} lon={lon} />
         </MapContainer>
         <div className="absolute bottom-2 left-2 right-2 bg-surface/80 p-2 text-[10px] font-mono card-border border border-outline-variant/50 rounded z-[1000] pointer-events-none">
           {formatLatLng(lat, lon)} | Alt: {alt_m.toFixed(0)}m

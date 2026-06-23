@@ -1,4 +1,4 @@
-import { Monitor, Settings, Radio, Info, ChevronLeft } from 'lucide-react';
+import { Monitor, Settings } from 'lucide-react';
 
 interface SidebarProps {
   activeView: 'mission-control' | 'settings';
@@ -37,24 +37,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         >
           <Settings size={22} />
         </button>
-        <button
-          onClick={() => onViewChange('settings')}
-          className="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-lg"
-          title="RF Config"
-        >
-          <Radio size={22} />
-        </button>
-        <button
-          className="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-lg"
-          title="About"
-        >
-          <Info size={22} />
-        </button>
       </nav>
-
-      <button className="w-12 h-12 flex items-center justify-center text-outline hover:text-on-surface transition-colors">
-        <ChevronLeft size={22} />
-      </button>
     </aside>
   );
 }
