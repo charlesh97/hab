@@ -24,6 +24,6 @@ class ReceiverConfig:
     symbol_rate: int = 100_000
     sps: int = 20
     gain_lna: int = 32
-    gain_vga: int = 30
+    gain_vga: int = 40
     gain_amp: int = 0
     serial: str | None = None

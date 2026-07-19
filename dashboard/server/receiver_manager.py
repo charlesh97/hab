@@ -67,7 +67,9 @@ class ReceiverManager:
         self._start_time = time.time()
         await self._ws.broadcast_status(self._build_status())
         try:
-            self._start_receiver()
+            result = self._start_receiver()
+            if asyncio.iscoroutine(result):
+                await result
             self._state = ReceiverState.RUNNING
             await self._ws.broadcast_status(self._build_status())
             self._status_task = asyncio.create_task(self._status_broadcast_loop())
@@ -103,11 +105,93 @@ class ReceiverManager:
             if key in updates:
                 setattr(self._config, key, updates[key])
 
-    def _start_receiver(self):
-        pass
+    async def _start_receiver(self):
+        """Launch the enhanced packet receiver as a subprocess.
+
+        Spawns pkt_simple_rx.py with the configured SDR parameters and
+        starts a background task that reads decoded packets from stdout
+        and feeds them to ingest_packet().
+        """
+        import os, re
+
+        hab_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..")
+        )
+        rx_script = os.path.join(
+            hab_root, "rf", "packet", "src", "pkt_simple_rx.py"
+        )
+        if not os.path.exists(rx_script):
+            raise FileNotFoundError(f"RX script not found: {rx_script}")
+
+        cmd = [
+            "/opt/homebrew/bin/python3.14",
+            rx_script,
+            "--freq", str(int(self._config.freq_hz)),
+            "--duration", "0",   # run until stopped via SIGTERM
+            "--lna", str(self._config.gain_lna or 16),
+            "--vga", str(self._config.gain_vga or 24),
+        ]
+        if getattr(self._config, "gain_amp", False):
+            cmd.append("--amp")
+        if self._config.serial:
+            cmd.extend(["--serial", self._config.serial])
+
+        self._receiver = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env={**os.environ,
+                 "PYTHONPATH": ":".join([
+                     "/opt/homebrew/lib/python3.14/site-packages",
+                     os.path.join(hab_root, "rf", "packet", "src"),
+                     os.path.join(hab_root, "rf", "packet"),
+                 ])},
+        )
+        self._bridge_task = asyncio.create_task(
+            self._read_receiver_lines()
+        )
+
+    async def _read_receiver_lines(self):
+        """Read decoded packet lines from the RX subprocess stdout."""
+        import re
+        import logging
+        log = logging.getLogger("receiver_manager")
+
+        # Pattern: [EnhancedRX] #N ... | 'message'
+        pkt_re = re.compile(r"\[EnhancedRX\]\s+#(\d+).*?\|\s*['\"](.+?)['\"]")
+
+        try:
+            if self._receiver is None or self._receiver.stdout is None:
+                return
+            async for line in self._receiver.stdout:
+                line = line.decode("utf-8", errors="replace").strip()
+                match = pkt_re.search(line)
+                if match:
+                    seq = int(match.group(1))
+                    text = match.group(2)
+                    await self.ingest_packet({
+                        "type": "power",
+                        "seq": seq,
+                        "raw": text,
+                        "bat_v": 0.0, "bat_a": 0.0, "bat_w": 0.0,
+                        "bat_pct": 100, "bat_temp_c": 25.0,
+                    })
+                elif "FO estimate" in line or "Opening" in line:
+                    log.info("RX: %s", line)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.exception("Error reading receiver output")
 
     def _stop_receiver(self):
-        pass
+        """Terminate the RX subprocess."""
+        if self._receiver is not None:
+            try:
+                self._receiver.terminate()
+            except ProcessLookupError:
+                pass
+        if self._bridge_task and not self._bridge_task.done():
+            self._bridge_task.cancel()
 
     async def ingest_packet(self, packet: dict):
         """Receive and broadcast a telemetry packet from external sources.
