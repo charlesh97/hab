@@ -6,13 +6,16 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   TelemetrySample, FlightPhase, Packet, LinkStatus,
   PositionData, MotionData, EnvironmentData, PowerData,
-  LogEntry, TelemetryMessage, MetricPoint, ConnectionLogEntry,
+  LogEntry, DashboardLogEntry, TelemetryMessage, MetricPoint, ConnectionLogEntry,
 } from '../types';
 import { EngineStatus } from '../types';
 
 interface WsMessage {
   type: string;
-  data: any;
+  data?: any;
+  timestamp?: unknown;
+  level?: unknown;
+  message?: unknown;
 }
 
 const WS_URL = `ws://${window.location.hostname}:8000/ws`;
@@ -26,6 +29,7 @@ function _derivePhase(altitude: number, verticalSpeed: number): FlightPhase {
 }
 
 const MAX_LOG_ENTRIES = 500;
+const MAX_DASHBOARD_LOG_ENTRIES = 1000;
 
 export function useHabApi() {
   const [connected, setConnected] = useState(false);
@@ -52,6 +56,7 @@ export function useHabApi() {
     telemetry: 'NOMINAL', packet: 'NOMINAL', video: 'NOMINAL',
   });
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
+  const [sdrStatus, setSdrStatus] = useState<any>(null);
   const [spectrum, setSpectrum] = useState<any>(null);
   const [connectionLog, setConnectionLog] = useState<ConnectionLogEntry[]>([]);
   const [position, setPosition] = useState<PositionData>({
@@ -72,12 +77,14 @@ export function useHabApi() {
     bat_v: 7.62, bat_a: 0.84, bat_w: 6.4, bat_pct: 68,
     bat_temp_c: 8.1,
   });
-  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [packetEntries, setPacketEntries] = useState<LogEntry[]>([]);
+  const [logEntries, setLogEntries] = useState<DashboardLogEntry[]>([]);
   const [packetRate, _setPacketRate] = useState(2.4);
   const [packetRateHistory, _setPacketRateHistory] = useState<number[]>([]);
   void packetRateHistory;
   const [lastPacketAge, _setLastPacketAge] = useState(1.2);
   const [packetSeq, setPacketSeq] = useState(18430);
+  const [uptime, setUptime] = useState('00:00:00');
 
   const metricHistoryRef = useRef<{
     altitude: MetricPoint[];
@@ -103,8 +110,8 @@ export function useHabApi() {
 
   const [metricHistory, setMetricHistory] = useState<typeof metricHistoryRef.current>(metricHistoryRef.current);
 
-  const addLogEntry = useCallback((timestamp: string, type: LogEntry['type'], payload: string) => {
-    setLogEntries((prev) => {
+  const addPacketEntry = useCallback((timestamp: string, type: LogEntry['type'], payload: string) => {
+    setPacketEntries((prev) => {
       const next = [...prev, { timestamp, type, payload }];
       return next.length > 500 ? next.slice(next.length - 500) : next;
     });
@@ -113,7 +120,7 @@ export function useHabApi() {
   const wsRef = useRef<WebSocket | null>(null);
   const currentRef = useRef(current);
   const prevEngineStatusRef = useRef<EngineStatus | null>(null);
-  const addLogEntryRef = useRef<(message: string, type: ConnectionLogEntry['type']) => void>(() => {});
+  const addLogEntryRef = useRef<(message: string, type: ConnectionLogEntry['type']) => void>(() => undefined);
   const missionStartRef = useRef<number | null>(null);
 
   addLogEntryRef.current = useCallback((message: string, type: ConnectionLogEntry['type']) => {
@@ -152,8 +159,26 @@ export function useHabApi() {
           try {
             const msg: WsMessage = JSON.parse(event.data);
 
-            if (msg.type === 'status') {
+            if (msg.type === 'log') {
+              const timestamp = typeof msg.timestamp === 'string'
+                ? msg.timestamp
+                : new Date().toISOString().substring(11, 19);
+              const rawLevel = typeof msg.level === 'string' ? msg.level.toUpperCase() : 'INFO';
+              const level = rawLevel === 'WARNING'
+                ? 'WARN'
+                : rawLevel === 'CRITICAL' ? 'ERROR' : rawLevel;
+              const message = typeof msg.message === 'string' ? msg.message : String(msg.message ?? '');
+              setLogEntries((prev) => {
+                const next = [...prev, { timestamp, level, message }];
+                return next.length > MAX_DASHBOARD_LOG_ENTRIES
+                  ? next.slice(next.length - MAX_DASHBOARD_LOG_ENTRIES)
+                  : next;
+              });
+            } else if (msg.type === 'status') {
               setEngineStatus(msg.data);
+              if (msg.data && Object.prototype.hasOwnProperty.call(msg.data, 'dvbs2')) {
+                setSdrStatus(msg.data);
+              }
               setMissionTime((prev) => prev + 1);
             } else if (msg.type === 'spectrum') {
               setSpectrum(msg.data);
@@ -170,24 +195,24 @@ export function useHabApi() {
               if (data.type === 'position') {
                 setPosition(data);
                 pushMetric('altitude', data.alt_m);
-                addLogEntry(time, 'POS', `lat:${data.lat.toFixed(5)} lon:${data.lon.toFixed(5)} alt:${data.alt_m.toFixed(0)}m sats:${data.sats} fix:${data.fix_type}`);
+                addPacketEntry(time, 'POS', `lat:${data.lat.toFixed(5)} lon:${data.lon.toFixed(5)} alt:${data.alt_m.toFixed(0)}m sats:${data.sats} fix:${data.fix_type}`);
               } else if (data.type === 'motion') {
                 setMotion(data);
                 pushMetric('verticalSpeed', data.vs_mps);
                 pushMetric('roll', data.att_deg.roll);
                 pushMetric('pitch', data.att_deg.pitch);
                 pushMetric('yaw', data.att_deg.yaw);
-                addLogEntry(time, 'MOT', `gs:${data.gs_mps.toFixed(1)} vs:${data.vs_mps.toFixed(1)} hdg:${data.heading_deg.toFixed(1)}`);
+                addPacketEntry(time, 'MOT', `gs:${data.gs_mps.toFixed(1)} vs:${data.vs_mps.toFixed(1)} hdg:${data.heading_deg.toFixed(1)}`);
               } else if (data.type === 'environment') {
                 setEnvironment(data);
                 pushMetric('externalTemp', data.temp_ext_c);
                 pushMetric('internalTemp', data.temp_int_c);
                 pushMetric('pressure', data.pressure_hpa);
                 pushMetric('humidity', data.humidity_pct);
-                addLogEntry(time, 'ENV', `ext:${data.temp_ext_c.toFixed(1)}°C int:${data.temp_int_c.toFixed(1)}°C pres:${data.pressure_hpa.toFixed(1)}hPa hum:${data.humidity_pct.toFixed(1)}%`);
+                addPacketEntry(time, 'ENV', `ext:${data.temp_ext_c.toFixed(1)}°C int:${data.temp_int_c.toFixed(1)}°C pres:${data.pressure_hpa.toFixed(1)}hPa hum:${data.humidity_pct.toFixed(1)}%`);
               } else if (data.type === 'power') {
                 setPower(data);
-                addLogEntry(time, 'PWR', `v:${data.bat_v.toFixed(2)}V a:${data.bat_a.toFixed(2)}A w:${data.bat_w.toFixed(1)}W ${data.bat_pct.toFixed(0)}%`);
+                addPacketEntry(time, 'PWR', `v:${data.bat_v.toFixed(2)}V a:${data.bat_a.toFixed(2)}A w:${data.bat_w.toFixed(1)}W ${data.bat_pct.toFixed(0)}%`);
               }
 
               // Update TelemetrySample from incoming telemetry
@@ -327,7 +352,12 @@ export function useHabApi() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (missionStartRef.current !== null) {
-        setMissionTime(Math.floor((Date.now() - missionStartRef.current) / 1000));
+        const elapsed = Math.floor((Date.now() - missionStartRef.current) / 1000);
+        setMissionTime(elapsed);
+        const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+        const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        setUptime(`${h}:${m}:${s}`);
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -341,6 +371,9 @@ export function useHabApi() {
       'configure': 'cmd:configure',
       'set_frequency': 'cmd:configure',
       'set_gain': 'cmd:configure',
+      'sdr_start': 'cmd:sdr:start',
+      'sdr_stop': 'cmd:sdr:stop',
+      'sdr_configure': 'cmd:sdr:configure',
     };
     const msgType = typeMap[command] || command;
     const payload = { type: msgType, data: data || {} };
@@ -375,7 +408,13 @@ export function useHabApi() {
     return () => clearInterval(interval);
   }, [connected, packetsReceiving, packetSeq]);
 
-  // Update video link status based on engine pipeline
+  // Derive system health from link statuses
+  const systemHealth = useMemo<'NOMINAL' | 'DEGRADED' | 'OFFLINE'>(() => {
+    if (!connected) return 'OFFLINE';
+    const statuses = [newLinkStatus.telemetry, newLinkStatus.packet, newLinkStatus.video];
+    if (statuses.every((s) => s === 'NOMINAL')) return 'NOMINAL';
+    return 'DEGRADED';
+  }, [connected, newLinkStatus]);
   useEffect(() => {
     setNewLinkStatus((prev) => ({
       ...prev,
@@ -397,7 +436,7 @@ export function useHabApi() {
     setMetricHistory({ ...metricHistoryRef.current });
   }
 
-  const loadPositions = useCallback(async (since: number = 0): Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>> => {
+  const loadPositions = useCallback(async (since = 0): Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>> => {
     try {
       const host = window.location.hostname;
       const res = await fetch(`http://${host}:8000/api/positions?since=${since}&limit=5000`);
@@ -413,12 +452,15 @@ export function useHabApi() {
     connecting,
     phase,
     missionTime,
+    uptime,
+    systemHealth,
     current,
     history,
     packets,
     packetsReceiving,
     newLinkStatus,
     engineStatus,
+    sdrStatus,
     spectrum,
     sendCommand,
     connectionLog,
@@ -427,6 +469,7 @@ export function useHabApi() {
     motion,
     environment,
     power,
+    packetEntries,
     logEntries,
     packetRate,
     lastPacketAge,

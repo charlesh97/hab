@@ -33,8 +33,16 @@ python() {
 export -f python
 
 # Set PYTHONPATH for GNU Radio modules (Homebrew on Apple Silicon)
+# The Homebrew site-packages holds pure-Python modules (gnuradio, SoapySDR, etc.)
 if [ -d "/opt/homebrew/lib/python3.14/site-packages" ]; then
     export PYTHONPATH="/opt/homebrew/lib/python3.14/site-packages:$PYTHONPATH"
+fi
+
+# The GNU Radio cellar holds compiled C extensions (pmt, gr blocks, etc.)
+# that are NOT symlinked into the global site-packages.
+GR_CELLAR=$(find /opt/homebrew/Cellar/gnuradio -maxdepth 2 -name "site-packages" -type d 2>/dev/null | head -1)
+if [ -n "$GR_CELLAR" ]; then
+    export PYTHONPATH="$GR_CELLAR:$PYTHONPATH"
 fi
 
 # Add local module paths

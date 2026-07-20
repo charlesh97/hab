@@ -60,6 +60,12 @@ export interface LogEntry {
   payload: string;
 }
 
+export interface DashboardLogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
 export interface EngineStatus {
   running: boolean;
   tx_active: boolean;

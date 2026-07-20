@@ -1,6 +1,6 @@
-import { Cpu, Radio, Satellite, GitBranch, HelpCircle } from 'lucide-react';
+import { Cpu, Radio, HelpCircle } from 'lucide-react';
 
-export type SettingsTab = 'device' | 'rf' | 'dvbs2' | 'pipeline' | 'about';
+export type SettingsTab = 'device' | 'rf' | 'about';
 
 interface SettingsTabsProps {
   activeTab: SettingsTab;
@@ -9,9 +9,7 @@ interface SettingsTabsProps {
 
 const tabs: { key: SettingsTab; label: string; Icon: typeof Cpu }[] = [
   { key: 'device', label: 'DEVICE', Icon: Cpu },
-  { key: 'rf', label: 'RF', Icon: Radio },
-  { key: 'dvbs2', label: 'DVB-S2', Icon: Satellite },
-  { key: 'pipeline', label: 'PIPELINE', Icon: GitBranch },
+  { key: 'rf', label: 'RF CONFIG', Icon: Radio },
   { key: 'about', label: 'ABOUT', Icon: HelpCircle },
 ];
 

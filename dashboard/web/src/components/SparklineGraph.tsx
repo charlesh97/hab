@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { LineChart, Line, ReferenceLine, YAxis } from 'recharts';
 import { MetricPoint } from '../types';
 
@@ -15,6 +15,7 @@ function formatValue(value: number, metricLabel: string): string {
   if (metricLabel === 'YAW') return value.toFixed(0);
   return value.toFixed(1);
 }
+
 export function SparklineGraph({
   data,
   color,
@@ -22,7 +23,19 @@ export function SparklineGraph({
   metricLabel,
   showZeroLine = false,
 }: SparklineGraphProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(200);
   const currentValue = data.length > 0 ? data[data.length - 1].value : 0;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateWidth = () => setChartWidth(el.offsetWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const yTicks = useMemo(() => {
     if (data.length === 0) return [0, 0, 0];
@@ -54,7 +67,7 @@ export function SparklineGraph({
             <span className="text-[8px] text-outline"> {unitLabel}</span>
           </span>
         </div>
-        <div className="bg-surface-container-low rounded-[3px] h-12 flex items-center justify-center">
+        <div ref={containerRef} className="bg-surface-container-low rounded-[3px] h-12 flex items-center justify-center">
           <span className="text-[9px] text-outline">No data</span>
         </div>
       </div>
@@ -70,9 +83,9 @@ export function SparklineGraph({
           <span className="text-[8px] text-outline"> {unitLabel}</span>
         </span>
       </div>
-      <div className="bg-surface-container-low rounded-[3px] h-12 relative overflow-hidden">
+      <div ref={containerRef} className="bg-surface-container-low rounded-[3px] h-12 relative overflow-hidden">
         <LineChart
-          width={9999}
+          width={Math.max(chartWidth, 40)}
           height={48}
           data={data}
           margin={{ top: 4, right: 36, bottom: 4, left: 0 }}

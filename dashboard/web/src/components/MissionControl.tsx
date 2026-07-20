@@ -1,14 +1,13 @@
 import { MapCard } from './MapCard';
 import { CameraFeed } from './CameraFeed';
 import { TelemetryCard } from './TelemetryCard';
-import { PacketStream } from './PacketStream';
 import {
   PositionData,
   MotionData,
   PowerData,
   LinkStatus,
-  LogEntry,
   MetricPoint,
+  EngineStatus,
 } from '../types';
 
 interface MissionControlProps {
@@ -17,7 +16,6 @@ interface MissionControlProps {
   power: PowerData;
   linkStatus: LinkStatus;
   packetRate: number;
-  logEntries: LogEntry[];
   metricHistory: {
     altitude: MetricPoint[];
     verticalSpeed: MetricPoint[];
@@ -30,6 +28,11 @@ interface MissionControlProps {
     yaw: MetricPoint[];
   };
   loadPositions: (since: number) => Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>>;
+  sendCommand: (command: string, data?: any) => void;
+  sdrStatus: any;
+  engineStatus: EngineStatus | null;
+  connected: boolean;
+  footerHeight: number;
 }
 
 export function MissionControl({
@@ -38,37 +41,41 @@ export function MissionControl({
   power,
   linkStatus,
   packetRate,
-  logEntries,
   metricHistory,
   loadPositions,
+  sdrStatus,
+  footerHeight,
 }: MissionControlProps) {
   return (
-    <>
-      <main className="ml-[64px] mt-[72px] h-[calc(100vh-272px)] p-4 grid grid-cols-[2fr_3fr_2fr] gap-4">
-        {/* Left Column: Map */}
-        <section className="overflow-hidden">
-          <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} loadPositions={loadPositions} />
-        </section>
+    <main
+      className="ml-[64px] mt-[72px] flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-1 lg:grid-cols-[minmax(250px,1fr)_minmax(300px,2fr)_minmax(220px,1fr)] gap-4"
+      style={{ height: `calc(100vh - 72px - ${footerHeight}px)` }}
+    >
+      {/* Left Column: Map */}
+      <section className="min-h-[300px] overflow-hidden">
+        <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} loadPositions={loadPositions} />
+      </section>
 
-        {/* Center Column: Video Feed */}
-        <section className="overflow-hidden">
-          <CameraFeed />
-        </section>
+      {/* Center Column: Video Feed */}
+      <section className="min-h-[300px] overflow-hidden flex">
+        <CameraFeed
+          isConnected={linkStatus.video === 'NOMINAL'}
+          locked={sdrStatus?.dvbs2?.locked || false}
+          sdrStatus={sdrStatus}
+        />
+      </section>
 
-        {/* Right Column: Unified Telemetry Card */}
-        <section className="overflow-hidden">
-          <TelemetryCard
-            position={position}
-            motion={motion}
-            power={power}
-            linkStatus={linkStatus}
-            packetRate={packetRate}
-            metricHistory={metricHistory}
-          />
-        </section>
-      </main>
-
-      <PacketStream entries={logEntries} />
-    </>
+      {/* Right Column: Unified Telemetry Card */}
+      <section className="min-h-[300px] overflow-hidden">
+        <TelemetryCard
+          position={position}
+          motion={motion}
+          power={power}
+          linkStatus={linkStatus}
+          packetRate={packetRate}
+          metricHistory={metricHistory}
+        />
+      </section>
+    </main>
   );
 }

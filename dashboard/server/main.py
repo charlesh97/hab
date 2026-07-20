@@ -26,16 +26,25 @@ from starlette.responses import FileResponse
 
 from config import ReceiverConfig, ServerConfig
 from ws_manager import WebSocketManager
-from receiver_manager import ReceiverManager
+from sdr_manager import SdrManager
+from logging_handler import setup_logging
 from routes.rest import create_rest_router
 from routes.ws import create_ws_router
+
+
+log_handler = setup_logging()
 
 
 def create_app() -> FastAPI:
     server_config = ServerConfig()
     receiver_config = ReceiverConfig()
     ws_manager = WebSocketManager()
-    receiver_manager = ReceiverManager(ws_manager, receiver_config, db_path=server_config.database_path)
+    log_handler.set_ws_manager(ws_manager)
+    sdr_manager = SdrManager(
+        ws_manager,
+        receiver_config,
+        db_path=server_config.database_path,
+    )
 
     app = FastAPI(title="HAB Receiver Server")
 
@@ -48,10 +57,10 @@ def create_app() -> FastAPI:
     )
 
     app.state.ws_manager = ws_manager
-    app.state.receiver_manager = receiver_manager
+    app.state.sdr_manager = sdr_manager
 
-    app.include_router(create_rest_router(receiver_manager, ws_manager))
-    app.include_router(create_ws_router(ws_manager, receiver_manager))
+    app.include_router(create_rest_router(ws_manager=ws_manager))
+    app.include_router(create_ws_router(ws_manager, sdr_manager))
 
     # Serve dashboard static files (built React SPA)
     dist_dir = HAB_ROOT / "dashboard" / "web" / "dist"

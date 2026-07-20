@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 import time
 from collections import deque
@@ -12,6 +13,9 @@ from datetime import datetime, timezone
 
 from models import ReceiverState, SpectrumFrame
 from config import ReceiverConfig
+
+
+logger = logging.getLogger("receiver")
 
 
 class InvalidStateError(Exception):
@@ -35,16 +39,20 @@ class ReceiverManager:
         self._db_path = db_path
         self._db_conn: sqlite3.Connection | None = None
         if db_path:
-            self._db_conn = sqlite3.connect(str(db_path))
-            self._db_conn.execute(
-                "CREATE TABLE IF NOT EXISTS packets ("
-                "  seq INTEGER PRIMARY KEY,"
-                "  received_at TEXT NOT NULL,"
-                "  type TEXT NOT NULL,"
-                "  payload TEXT NOT NULL"
-                ")"
-            )
-            self._db_conn.commit()
+            try:
+                self._db_conn = sqlite3.connect(str(db_path))
+                self._db_conn.execute(
+                    "CREATE TABLE IF NOT EXISTS packets ("
+                    "  seq INTEGER PRIMARY KEY,"
+                    "  received_at TEXT NOT NULL,"
+                    "  type TEXT NOT NULL,"
+                    "  payload TEXT NOT NULL"
+                    ")"
+                )
+                self._db_conn.commit()
+            except sqlite3.Error:
+                logger.exception("Failed to initialize packet database: %s", db_path)
+                raise
 
     @property
     def state(self) -> ReceiverState:
@@ -154,8 +162,6 @@ class ReceiverManager:
     async def _read_receiver_lines(self):
         """Read decoded packet lines from the RX subprocess stdout."""
         import re
-        import logging
-        log = logging.getLogger("receiver_manager")
 
         # Pattern: [EnhancedRX] #N ... | 'message'
         pkt_re = re.compile(r"\[EnhancedRX\]\s+#(\d+).*?\|\s*['\"](.+?)['\"]")
@@ -177,11 +183,11 @@ class ReceiverManager:
                         "bat_pct": 100, "bat_temp_c": 25.0,
                     })
                 elif "FO estimate" in line or "Opening" in line:
-                    log.info("RX: %s", line)
+                    logger.info("RX: %s", line)
         except asyncio.CancelledError:
             pass
         except Exception:
-            log.exception("Error reading receiver output")
+            logger.exception("Error reading receiver output")
 
     def _stop_receiver(self):
         """Terminate the RX subprocess."""
@@ -200,6 +206,11 @@ class ReceiverManager:
         POSTs a packet.  Appends to the packet buffer, updates counters,
         and broadcasts to all connected WebSocket clients.
         """
+        logger.info(
+            "Ingesting packet type=%s seq=%s",
+            packet.get("type", "unknown"),
+            packet.get("seq", "unknown"),
+        )
         self._packet_buffer.append(packet)
         self._packets_total += 1
         self._packets_valid += 1
@@ -252,9 +263,13 @@ class ReceiverManager:
                 ),
             )
             self._db_conn.commit()
-        except Exception:
-            import logging
-            logging.getLogger("receiver_manager").warning(
-                "Failed to write packet seq=%s to database", packet.get("seq"),
+        except sqlite3.Error:
+            logger.error(
+                "SQLite error writing packet seq=%s", packet.get("seq"),
                 exc_info=True,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to serialize packet seq=%s for database",
+                packet.get("seq"),
             )

@@ -3,16 +3,19 @@ import { X } from 'lucide-react';
 import { SettingsTabs, SettingsTab } from './SettingsTabs';
 import { SettingsDevice } from './SettingsDevice';
 import { SettingsRf } from './SettingsRf';
-import { SettingsDvbs2 } from './SettingsDvbs2';
-import { SettingsPipeline } from './SettingsPipeline';
 import { SettingsAbout } from './SettingsAbout';
 
 interface SettingsPageProps {
   onClose: () => void;
+  sendCommand: (command: string, data?: any) => void;
+  sdrStatus: any;
+  engineStatus: any;
+  connected: boolean;
 }
 
-export function SettingsPage({ onClose }: SettingsPageProps) {
+export function SettingsPage({ onClose, sendCommand, sdrStatus, engineStatus, connected }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('device');
+  const [selectedSerial, setSelectedSerial] = useState('');
 
   return (
     <div className="ml-[64px] mt-[72px] h-[calc(100vh-72px)] overflow-y-auto">
@@ -26,11 +29,22 @@ export function SettingsPage({ onClose }: SettingsPageProps) {
 
         <SettingsTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {activeTab === 'device' && <SettingsDevice />}
-        {activeTab === 'rf' && <SettingsRf />}
-        {activeTab === 'dvbs2' && <SettingsDvbs2 />}
-        {activeTab === 'pipeline' && <SettingsPipeline />}
-        {activeTab === 'about' && <SettingsAbout />}
+        <div style={{ display: activeTab === 'device' ? 'block' : 'none' }}>
+          <SettingsDevice
+            connected={connected}
+            sdrStatus={sdrStatus}
+            engineStatus={engineStatus}
+            selectedSerial={selectedSerial}
+            onSerialChange={setSelectedSerial}
+            sendCommand={sendCommand}
+          />
+        </div>
+        <div style={{ display: activeTab === 'rf' ? 'block' : 'none' }}>
+          <SettingsRf sendCommand={sendCommand} sdrStatus={sdrStatus} selectedSerial={selectedSerial} />
+        </div>
+        <div style={{ display: activeTab === 'about' ? 'block' : 'none' }}>
+          <SettingsAbout />
+        </div>
       </div>
     </div>
   );

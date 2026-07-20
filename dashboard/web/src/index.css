@@ -108,3 +108,12 @@ body {
   background-image: radial-gradient(circle at 2px 2px, #30363d 1px, transparent 0);
   background-size: 32px 32px;
 }
+
+/* Scan line animation for camera empty state */
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+.animate-scan {
+  animation: scan 3s ease-in-out infinite;
+}
