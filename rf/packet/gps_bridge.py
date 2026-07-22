@@ -31,7 +31,7 @@ except ImportError:
     sys.exit(1)
 
 # ── Add payload modules to path ────────────────────────────────────
-_HAB_ROOT = Path(__file__).resolve().parent.parent
+_HAB_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_HAB_ROOT / "payload"))
 
 from telemetry.packet_format import PositionFrame, unpack_frame  # noqa: E402
@@ -130,7 +130,7 @@ async def read_rx_stdout(
         try:
             resp = session.post(
                 dashboard_url,
-                json={"type": "telemetry", "data": packet},
+                json={"data": packet},
                 timeout=5.0,
             )
             ok = resp.status_code == 200

@@ -206,10 +206,10 @@ def main() -> None:
 
             src = blocks.vector_source_c(burst, False)
             thr = blocks.throttle(gr.sizeof_gr_complex, fs)
-            sink_kwargs: tuple = ("driver=hackrf", "fc32", 1)
-            sink = soapy.sink(*sink_kwargs) if not args.serial else soapy.sink(
-                "driver=hackrf", "fc32", 1, f"serial={args.serial}"
-            )
+            sink_kwargs: tuple = ("driver=hackrf", "fc32", 1, "", "", [""], [""])
+            if args.serial:
+                sink_kwargs = ("driver=hackrf", "fc32", 1, f"serial={args.serial}", "", [""], [""])
+            sink = soapy.sink(*sink_kwargs)
             sink.set_sample_rate(0, fs)
             sink.set_bandwidth(0, 0)
             sink.set_frequency(0, freq)
