@@ -213,11 +213,26 @@ hab ALL=(ALL:ALL) NOPASSWD: ALL
 
 All Python code lives in `/home/hab/payload/`.
 
-**Dependencies** (installed via `pip install`):
+**System packages** (installed via `apt`):
+```
+gnuradio                  # BPSK modulation + SoapySDR sink
+soapysdr-module-hackrf    # HackRF driver for SoapySDR/GNU Radio
+hackrf                    # CLI tools (hackrf_info, hackrf_transfer)
+python3-numpy             # Array ops for BPSK waveform generation
+```
+
+**Python packages** (installed via `pip install`):
 ```
 smbus2      # I2C on Linux (/dev/i2c-N)
 pyserial    # UART for GPS
 ```
+
+**udev rule** for HackRF user access:
+```
+# /etc/udev/rules.d/99-hackrf.rules
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="6089", MODE="0666"
+```
+User `hab` is also in group `plugdev`.
 
 No virtual environment — installed system-wide since this is a single-purpose payload SBC.
 

@@ -411,11 +411,14 @@ class LiveReceiver:
                         texts = self.decoder.decode(chunk)
                         for text, score, fo, phase, sync_idx, length in texts:
                             self.decoder.packets_found += 1
-                            clean = text.decode('ascii', errors='replace').strip()
-                            if 'HELLO' in clean.upper() or 'WORLD' in clean.upper():
-                                print(f"[PktRx] *** HELLO WORLD! *** FO={fo/1e3:.1f} kHz phase={phase} score={score} | {clean!r}", flush=True)
+                            if args.hex_output:
+                                print(f"[PktRx] #{self.decoder.packets_found} FO={fo/1e3:.1f} kHz phase={phase} | {text.hex()}", flush=True)
                             else:
-                                print(f"[PktRx] #{self.decoder.packets_found} FO={fo/1e3:.1f} kHz | {clean!r}", flush=True)
+                                clean = text.decode('ascii', errors='replace').strip()
+                                if 'HELLO' in clean.upper() or 'WORLD' in clean.upper():
+                                    print(f"[PktRx] *** HELLO WORLD! *** FO={fo/1e3:.1f} kHz phase={phase} score={score} | {clean!r}", flush=True)
+                                else:
+                                    print(f"[PktRx] #{self.decoder.packets_found} FO={fo/1e3:.1f} kHz | {clean!r}", flush=True)
                         accum = []
 
                         elapsed = time.time() - start
@@ -440,6 +443,8 @@ if __name__ == '__main__':
     parser.add_argument('--serial', type=str, default=None)
     parser.add_argument('--duration', type=int, default=30)
     parser.add_argument('--file', type=str, default=None)
+    parser.add_argument('--hex-output', action='store_true', default=False,
+                        help='Output decoded payloads as hex (for binary data)')
     args = parser.parse_args()
 
     if args.file:
@@ -449,8 +454,11 @@ if __name__ == '__main__':
         decoder = PacketDecoder()
         texts = decoder.decode(I + 1j*Q)
         for text, score, fo, phase, sync_idx, length in texts:
-            clean = text.decode('ascii', errors='replace').strip()
-            print(f"FO={fo/1e3:.1f} kHz score={score} len={length} | {clean!r}")
+            if args.hex_output:
+                print(f"FO={fo/1e3:.1f} kHz len={length} | {text.hex()}")
+            else:
+                clean = text.decode('ascii', errors='replace').strip()
+                print(f"FO={fo/1e3:.1f} kHz score={score} len={length} | {clean!r}")
     else:
         rx = LiveReceiver(freq=args.freq, lna=args.lna, vga=args.vga,
                           amp=args.amp, serial=args.serial, duration=args.duration)

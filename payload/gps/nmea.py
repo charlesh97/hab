@@ -86,6 +86,7 @@ def parse_gga(sentence: str) -> dict[str, object] | None:
     fix_quality = _safe_float(fields[6])
     satellites = _safe_float(fields[7])
     altitude = _safe_float(fields[9])
+    hdop = _safe_float(fields[8])
 
     if not utc_time or not lat_raw or not lon_raw:
         return None
@@ -97,6 +98,7 @@ def parse_gga(sentence: str) -> dict[str, object] | None:
         "fix_quality": int(fix_quality) if fix_quality is not None else None,
         "altitude": altitude,
         "satellites": int(satellites) if satellites is not None else None,
+        "hdop": hdop,
     }
 
 

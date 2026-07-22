@@ -445,7 +445,92 @@ Battery sizing: 4S LiPo (14.8V) → 5V buck converter. For a 3-hour flight: ~21 
 
 ---
 
-## 11. Open Questions
+## 11. Packet Radio Path — GPS-Only (2026-07-21)
+
+> **Status:** BUILDING — parallel to the DVB-S2 path. This is the "get data flowing now" pipeline.
+
+### 11.1 Architecture
+
+The DVB-S2 path (sections 1–10) requires ffmpeg + video camera + MPEG-TS muxing + dvbs2-tx. This path runs in parallel:
+GPS-only BPSK packet radio using the validated `rf/packet/` baseline, feeding the existing dashboard.
+
+```
+Rock 2A (TX)                              Mac (RX)
+─────────────                             ────────
+GPS L76K                                   HackRF clone (60a464dc3606610f)
+  │                                          │
+  ▼                                          ▼
+nmea.py (parse GGA/RMC)                  pkt_simple_rx.py (UNTOCUHED)
+  │  +HDOP field                            BPSK decode → "[PktRx] #N | '...'"
+  ▼                                          │
+packet_format.py (NEW)                      ▼
+  type-tagged binary frame                gps_bridge.py (NEW)
+  e.g. 0x01 + position fields              parse stdout → unpack → JSON
+  │                                          │
+  ▼                                          ▼
+gps_packet_tx.py (NEW)                    POST /api/packet
+  Build BPSK packet waveform                │
+  GNU Radio vector_source → SoapySDR        ▼
+  (same chain as pkt_simple_tx.py)        dashboard (EXISTING)
+         │                                  FastAPI :8000
+         └────────── 915 MHz ──────────────► React SPA + map
+```
+
+### 11.2 On-Air Payload Format
+
+Each packet wraps in the BPSK outer frame (256b preamble + 32b sync 0xE38FC0FC + 16b length + CRC-16/XMODEM). The *payload* uses typed binary frames:
+
+**Type 0x01 — Position (38 bytes):**
+```
+u8   type = 0x01
+u16  seq
+f64  lat (IEEE 754)
+f64  lon
+f32  alt_m
+f32  agl_m
+u8   fix (0/1)
+u8   fix_type (0=none, 1=2d, 2=3d)
+u8   sats
+f32  hdop
+f32  vdop
+```
+
+**Future:** 0x02=motion (52B), 0x03=environment (28B), 0x04=power (20B).
+
+Common fields (v, id, mid, t) are added by the bridge — constant per mission.
+
+### 11.3 Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| GNU Radio + SoapySDR on Rock 2A | Same validated BPSK chain as `pkt_simple_tx.py`; available in Debian repos |
+| Same packet format as baseline | 256b preamble + 32b sync 0xE38FC0FC + CRC-16/XMODEM — validated 36/36 tests |
+| Bridge bypasses receiver_manager | `receiver_manager.py` was stubbed for `[EnhancedRX]` format. Bridge POSTs to `/api/packet` directly |
+| Separate from packer.py | `packer.py` (54B struct) stays for DVB-S2 PID injection. Packet radio uses typed binary frames |
+| 1 Hz burst | ~64 ms air time per packet, ~936 ms idle. Power-efficient |
+| Battery read every 5th frame | MAX17049 on I2C1 works; type 0x04 power packets interleaved |
+
+### 11.4 Gaps Resolved From Original Plan
+
+| Original gap | Resolution |
+|---|---|
+| I2C bus0 sensors broken | Not needed — GPS-only path uses position frames |
+| GNU Radio on Rock 2A | `apt install gnuradio soapysdr-module-hackrf` — same stack as Mac |
+| Dashboard format mismatch | Bridge translates binary → JSON per type |
+
+### 11.5 Files
+
+| File | Status | Purpose |
+|---|---|---|
+| `payload/telemetry/packet_format.py` | NEW | Type-tagged binary frame pack/unpack |
+| `payload/gps/nmea.py` | PATCH | Add HDOP extraction from GGA field 8 |
+| `payload/tx/gps_packet_tx.py` | NEW | GPS→frame→BPSK→hackrf_transfer |
+| `rf/packet/gps_bridge.py` | NEW | RX stdout→unpack→POST /api/packet |
+| `payload/telemetry/packer.py` | KEEP | DVB-S2 path only, not modified |
+
+---
+
+## 12. Open Questions
 
 - [x] **GPS device path:** ~~Is it `/dev/ttyS2` on the Rock 2A?~~ → Resolved: `/dev/ttyS0` (UART0 M0). See SETUP.md §6.1 for FIQ debugger saga.
 - [x] **GPS functionality:** ~~No NMEA output?~~ → Resolved: 8 satellites, 3D fix, antenna OK. FIQ debugger was consuming UART data.
@@ -458,7 +543,7 @@ Battery sizing: 4S LiPo (14.8V) → 5V buck converter. For a 3-hour flight: ~21 
 
 ---
 
-## 12. References
+## 13. References
 
 - Rock 2A schematic / netlist — pin mapping source
 - Quectel L76K datasheet — GPS module specs
