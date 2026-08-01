@@ -7,10 +7,16 @@ This project builds a high‑altitude balloon payload and matching ground statio
 - Streaming a high‑bandwidth video downlink using DVB‑S2
 - Sending a robust QPSK packet telemetry link for flight state (GPS, altitude, environment)
 
+## Quick Start
+
+Want to run the composite link yourself? See **[docs/RF_LINK_RUNBOOK.md](docs/RF_LINK_RUNBOOK.md)** —
+hardware, validated config, full TX/RX parameter breakdown, video bridge,
+soak harness, and known gotchas.
+
 ## System Architecture
 
 ### Balloon Payload
-- Embedded Linux board (e.g., Orange Pi Zero 3)
+- Embedded Linux board (Rock 2A / Orange Pi Zero 3)
 - HackRF SDR as RF front end for transmission
 - Cameras for video capture
 - Weather and atmospheric sensors (see Sensor Suite)
