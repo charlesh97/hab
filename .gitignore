@@ -41,3 +41,7 @@ hab-esp32/tools/
 Thumbs.db
 .hermes/
 *.db
+
+# Stray downloads
+.html
+oup2.html
