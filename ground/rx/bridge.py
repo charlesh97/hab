@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""GPS Packet Bridge — launches pkt_simple_rx.py, translates to dashboard JSON.
+"""GPS Packet Bridge — launches demod.py, translates to dashboard JSON.
 
-Reads BPSK-decoded packets from pkt_simple_rx.py stdout, unpacks
+Reads BPSK-decoded packets from demod.py stdout, unpacks
 PositionFrame binary payloads, and POSTs dashboard-compatible JSON
 to the HAB Receiver Server at /api/packet.
 
 Usage:
-    /opt/homebrew/bin/python3.14 rf/packet/gps_bridge.py \
+    /opt/homebrew/bin/python3.14 ground/rx/bridge.py \
         --freq 915e6 --serial 60a464dc3606610f --lna 32 --vga 40 --amp
 
 The bridge manages the RX subprocess lifecycle and exits on SIGINT/ SIGTERM.
@@ -21,7 +21,6 @@ import os
 import re
 import signal
 import sys
-import time
 from pathlib import Path
 
 try:
@@ -30,13 +29,12 @@ except ImportError:
     print("ERROR: 'requests' not installed.  Run: pip install requests")
     sys.exit(1)
 
-# ── Add payload modules to path ────────────────────────────────────
+# ── Add payload and protocol modules to path ──────────────────────
 _HAB_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_HAB_ROOT / "payload"))
+sys.path.insert(0, str(_HAB_ROOT / "protocol"))
 
-from telemetry.packet_format import PositionFrame, unpack_frame  # noqa: E402
-
-# ── Constants ──────────────────────────────────────────────────────
+from telemetry import PositionFrame, unpack_frame  # noqa: E402
 
 BALLOON_ID = "HAB-001"
 MISSION_ID = "FLIGHT-1"
@@ -67,26 +65,6 @@ def extract_payload(line: str) -> bytes | None:
     except ValueError:
         return None
 
-
-def frame_to_dashboard(frame: PositionFrame) -> dict:
-    """Convert a PositionFrame to dashboard-compatible JSON."""
-    return {
-        "v": 1,
-        "id": BALLOON_ID,
-        "mid": MISSION_ID,
-        "seq": frame.seq,
-        "t": f"T{time.strftime('%H:%M:%S', time.gmtime())}",
-        "type": "position",
-        "lat": frame.lat,
-        "lon": frame.lon,
-        "alt_m": frame.alt_m,
-        "agl_m": frame.agl_m,
-        "fix": frame.fix,
-        "fix_type": frame.fix_type,
-        "sats": frame.sats,
-        "hdop": frame.hdop,
-        "vdop": frame.vdop,
-    }
 
 
 async def read_rx_stdout(
@@ -124,7 +102,10 @@ async def read_rx_stdout(
             continue
 
         # Convert to dashboard JSON
-        packet = frame_to_dashboard(frame)
+        packet = frame.to_transport(
+            balloon_id=BALLOON_ID,
+            mission_id=MISSION_ID,
+        )
 
         # POST to dashboard
         try:
@@ -163,8 +144,8 @@ async def main_async() -> None:
 
     dashboard_url = args.dashboard
 
-    # Locate pkt_simple_rx.py
-    rx_script = _HAB_ROOT / "rf" / "packet" / "src" / "pkt_simple_rx.py"
+    # Locate demod.py
+    rx_script = _HAB_ROOT / "ground" / "rx" / "demod.py"
     if not rx_script.exists():
         print(f"ERROR: RX script not found at {rx_script}")
         sys.exit(1)

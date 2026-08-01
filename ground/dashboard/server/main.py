@@ -2,7 +2,7 @@
 """HAB Receiver Server — FastAPI application entry point.
 
 Manages a HackRF via SoapySDR, decodes BPSK packet telemetry using
-rf-link/packet/src/ as a library, and streams decoded packets,
+dev/packet/packet/src/ as a library, and streams decoded packets,
 spectrum, and status to the web dashboard over a single WebSocket.
 
 Usage:
@@ -12,12 +12,13 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-HAB_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(HAB_ROOT / "rf" / "packet" / "src"))
-sys.path.insert(0, str(HAB_ROOT / "rf" / "dvbs2"))
+HAB_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(HAB_ROOT / "dev" / "packet" / "packet" / "src"))
+sys.path.insert(0, str(HAB_ROOT / "dev" / "dvbs2" / "dvbs2"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +27,7 @@ from starlette.responses import FileResponse
 
 from config import ReceiverConfig, ServerConfig
 from ws_manager import WebSocketManager
-from sdr_manager import SdrManager
+from receiver_manager import ReceiverManager
 from logging_handler import setup_logging
 from routes.rest import create_rest_router
 from routes.ws import create_ws_router
@@ -37,10 +38,16 @@ log_handler = setup_logging()
 
 def create_app() -> FastAPI:
     server_config = ServerConfig()
-    receiver_config = ReceiverConfig()
+    server_config.port = int(
+        os.environ.get("HAB_PORT", server_config.port)
+    )
+    receiver_config = ReceiverConfig(server_port=server_config.port)
     ws_manager = WebSocketManager()
     log_handler.set_ws_manager(ws_manager)
-    sdr_manager = SdrManager(
+
+    # ReceiverManager for packet buffering, persistence, and WebSocket broadcast.
+    # External sources can also POST to /api/packet, which feeds ingest_packet().
+    receiver_manager = ReceiverManager(
         ws_manager,
         receiver_config,
         db_path=server_config.database_path,
@@ -57,13 +64,18 @@ def create_app() -> FastAPI:
     )
 
     app.state.ws_manager = ws_manager
-    app.state.sdr_manager = sdr_manager
+    app.state.receiver_manager = receiver_manager
 
-    app.include_router(create_rest_router(ws_manager=ws_manager))
-    app.include_router(create_ws_router(ws_manager, sdr_manager))
+    app.include_router(
+        create_rest_router(
+            receiver_manager=receiver_manager,
+            ws_manager=ws_manager,
+        )
+    )
+    app.include_router(create_ws_router(ws_manager, receiver_manager))
 
     # Serve dashboard static files (built React SPA)
-    dist_dir = HAB_ROOT / "dashboard" / "web" / "dist"
+    dist_dir = HAB_ROOT / "ground" / "dashboard" / "web" / "dist"
     if dist_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="assets")
 
@@ -93,7 +105,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=int(os.environ.get("HAB_PORT", ServerConfig.port)),
         reload=True,
         log_level="info",
     )

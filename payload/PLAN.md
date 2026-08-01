@@ -382,7 +382,8 @@ hab/payload/
 │   └── capture.py          ← Camera config + frame grab
 ├── tx/
 │   ├── __init__.py
-│   └── tx_pipeline.py      ← ffmpeg + dvbs2-tx launcher
+│   ├── combined_tx.py      ← composite DVB-S2 video + BPSK telemetry TX
+│   └── main.py             ← entry point → combined_tx.main()
 └── tests/
     ├── test_i2c_scan.py    ← Phase 1A
     ├── test_sensors.py     ← Phase 1B
@@ -440,7 +441,7 @@ Battery sizing: 4S LiPo (14.8V) → 5V buck converter. For a 3-hour flight: ~21 
 4. **Phase 4:** Write telemetry packer + writer (`telemetry/*.py`)
 5. **Phase 5:** Write camera capture (`camera/capture.py`)
 6. **Phase 6:** Write integration orchestrator (`main.py`)
-7. **Phase 7:** Write DVB-S2 TX launcher (`tx/tx_pipeline.py`)
+7. **Phase 7:** Write composite DVB-S2 TX launcher (`tx/combined_tx.py` + `tx/main.py`)
 8. **Phase 8:** End-to-end bench test — HackRF TX → ground station RX → verify video + telemetry
 
 ---

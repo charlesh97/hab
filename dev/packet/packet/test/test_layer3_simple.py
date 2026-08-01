@@ -8,13 +8,30 @@ TX via hackrf_transfer, RX via SoapySDR → PacketDecoder → CRC validation.
 The production decoder uses GNU Radio's band-edge FLL for acquisition and
 its BPSK Costas loop for residual carrier tracking over long payloads.
 """
-import sys, os, time, tempfile, subprocess, signal, gc
+import gc
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+_HAB = Path(__file__).resolve().parent.parent.parent.parent.parent
+sys.path.insert(0, str(_HAB / "ground" / "rx"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import numpy as np
 import SoapySDR
 
 from pkt_simple_tx import make_packet
-from pkt_simple_rx import PacketDecoder, FS, SPS, PRE_SYNC, SYNC_BITS, MAX_POST_SYNC
+from demod import (
+    FS,
+    MAX_POST_SYNC,
+    PRE_SYNC,
+    SPS,
+    SYNC_BITS,
+    PacketDecoder,
+)
 
 FREQ = 433.5e6
 TX_SERIAL = '60a464dc3674640f'

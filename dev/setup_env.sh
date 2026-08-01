@@ -46,8 +46,8 @@ if [ -n "$GR_CELLAR" ]; then
 fi
 
 # Add local module paths
-export PYTHONPATH="$SCRIPT_DIR/dvbs2:$PYTHONPATH"
-export PYTHONPATH="$SCRIPT_DIR/../gui/python:$PYTHONPATH"
+export PYTHONPATH="$SCRIPT_DIR/dvbs2/dvbs2:$PYTHONPATH"
+export PYTHONPATH="$SCRIPT_DIR/../dev/gui/python:$PYTHONPATH"
 export PYTHONPATH="$SCRIPT_DIR/deprecated:$PYTHONPATH"
 
 # Fix Qt framework conflicts (Homebrew Qt5 vs venv)

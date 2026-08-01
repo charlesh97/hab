@@ -34,7 +34,7 @@ _POS_SIZE: int = _POS_STRUCT.size  # 38 bytes
 _FIX_TYPE_NAMES: dict[int, str] = {0: "none", 1: "2d", 2: "3d"}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PositionFrame:
     type: int  # 0x01
     seq: int
@@ -68,6 +68,40 @@ class PositionFrame:
             self.hdop,
             self.vdop,
         )
+
+    def to_transport(
+        self,
+        balloon_id: str = "HAB-001",
+        mission_id: str = "FLIGHT-1",
+        timestamp: str | None = None,
+    ) -> dict:
+        """JSON body for the dashboard transport layer.
+
+        The bridge calls this after unpacking a binary frame from the radio
+        link.  Envelope fields (balloon ID, mission ID, protocol version)
+        are bounded here so the protocol is the single source of truth for
+        *both* the binary wire format and the decoded JSON shape.
+        """
+        if timestamp is None:
+            import time as _time
+            timestamp = f"T{_time.strftime('%H:%M:%S', _time.gmtime())}"
+        return {
+            "v": 1,
+            "id": balloon_id,
+            "mid": mission_id,
+            "seq": self.seq,
+            "t": timestamp,
+            "type": "position",
+            "lat": self.lat,
+            "lon": self.lon,
+            "alt_m": self.alt_m,
+            "agl_m": self.agl_m,
+            "fix": self.fix,
+            "fix_type": self.fix_type,
+            "sats": self.sats,
+            "hdop": self.hdop,
+            "vdop": self.vdop,
+        }
 
     @staticmethod
     def unpack(data: bytes) -> PositionFrame:

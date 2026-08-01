@@ -1,0 +1,98 @@
+# DVB-S2 + BPSK Composite OTA Failure: Code Review
+
+## Problem
+
+The composite TX pipeline runs on a Rock 2A (RK3528A, quad A53 @ 2 GHz) and transmits a
+composite waveform containing DVB-S2 video (QPSK 1/2, 2 Msym/s) and BPSK telemetry (100 ksym/s,
+20 SPS), mixed at ±offset from center. The HackRF is tuned to 914 MHz, sample rate 8 MS/s,
+TX VGA=30, AMP on.
+
+The RX runs on a Mac via `hackrf_transfer` pipe → `combined_rx.py` → `_split()` → DVB-S2 rx.py
++ BPSK PacketDecoder. LNA=40, VGA=62, AMP on. Antennas are desk-side (3 m apart), confirmed
+connected.
+
+**Result: The Mac receives zero signal.** No BPSK frames decoded, no DVB-S2 lock. The TX reports
+"buffer overflow; dropped X samples" warnings every few seconds. The DVB-S2 encoder starts with
+an "IQ underflow; padded 320000 samples" (filler data).
+
+A *pure hardware* tone test using `hackrf_transfer` on both sides (no Python code) also showed
+no signal at the RX — but that test used `-x 0` (zero TX VGA gain), making it an invalid diagnostic.
+
+## Files to Review
+
+All under `~/git/hab/`:
+
+1. `payload/tx/combined_tx.py` — main TX pipeline
+   - SoapySDR→HackRF TX at 8 MS/s
+   - Dvbs2Pipeline class: ffmpeg → tx.py (subprocess pipe chain)
+   - Buffer management: reader thread fills bytearray, main loop drains
+   - `frequency_interleave()`: shifts DVB-S2 up by offset, BPSK down by offset
+   - `CompositeTransmitter.run()`: main loop
+
+2. `ground/rx/combined_rx.py` — main RX pipeline
+   - `hackrf_transfer -r /dev/stdout` → SC8 bytes → complex64
+   - `_split()`: shifts DVB-S2 down by offset, BPSK up by offset
+   - FIFO + DVB-S2 rx.py subprocess
+   - BPSK PacketDecoder with overlap
+
+3. `dev/dvbs2/dvbs2/tx.py` — GNU Radio DVB-S2 encoder (upstream project)
+   - Reads MPEG-TS from fd, outputs complex64 IQ to fd
+   - RRC filter with configurable delay
+
+4. `dev/dvbs2/dvbs2/rx.py` — GNU Radio DVB-S2 decoder (upstream project)
+   - Reads complex64 IQ from fd, outputs MPEG-TS to UDP
+   - RRC filter, symbol sync, carrier recovery, LDPC decode
+
+## Specific Questions
+
+### 1. TX Buffer Overflow Chain
+The encoder (tx.py) is a GNU Radio flow graph that should produce IQ at a steady rate matching
+the real-time symbol rate. But we see:
+- Underflow on first read (320k zeros padded)
+- Overflow warnings every 1-2 seconds (7-32K sample drops)
+
+Is the ffmpeg→tx.py pipe keeping up? Is the reader thread draining fast enough?
+Could the SoapySDR writeStream be blocking too long, causing the reader thread buffer to fill up?
+
+### 2. Frequency Plan Verification
+TX `frequency_interleave()`:
+```python
+oscillator = exp(1j * 2π * offset / sample_rate * t)
+composite = DVBS2_LEVEL * dvbs2_iq * oscillator + BPSK_LEVEL * bpsk_iq * conj(oscillator)
+```
+
+RX `_split()`:
+```python
+oscillator = exp(1j * 2π * offset / sample_rate * t)
+dvbs2 = samples * conj(oscillator)  # bring DVB-S2 (at +offset) to baseband
+bpsk = samples * oscillator          # bring BPSK (at -offset) to baseband
+```
+
+Verify this is symmetric. Will a DVB-S2 signal TX'd at `center_freq + offset` appear at
+the right place for the RX DVB-S2 decoder after mixing?
+
+### 3. Amplitude Balance
+`DVBS2_LEVEL = 0.65`, `BPSK_LEVEL = 0.45` in combined_tx.py. The HackRF has 8-bit DAC.
+At 0.65 + 0.45 = 1.1, the peak composite amplitude exceeds 1.0, causing clipping in the
+HackRF DAC. Could this cause spectral regrowth or signal corruption?
+
+### 4. Decoder RRC Delay Mismatch
+TX passes `--rrc-delay 2` to tx.py. Does RX rx.py receive `--rrc-delay 2` as well?
+Check `combined_rx.py`'s `_command()` method — does `--dvbs2-args` propagate `--rrc-delay 2`
+correctly? What does rx.py default to if not specified?
+
+### 5. FIFO Timing on RX
+The FIFO is created before hackrf_transfer starts. The RX DVB-S2 decoder (rx.py) opens
+the FIFO and may start initializing while hackrf_transfer is already pumping data.
+The 1 MB pipe buffer fix should help, but is there a race where rx.py's flow graph init
+takes longer than the FIFO buffer to fill?
+
+### 6. Overflow Fill Data
+When the TX buffer overflows, samples are dropped from the front of the buffer. This
+means the DVB-S2 waveform has discontinuities — is the GNU Radio dvbs2rx decoder resilient
+to these gaps? Could every overflow cause the receiver to lose lock and never re-acquire?
+
+### 7. SC8 Quantization on RX
+`combined_rx.py` converts SC8 (int8) from hackrf_transfer to complex64 by dividing by 128.0.
+combined_tx.py writes complex64 via SoapySDR. Is there any clipping or quantization issue
+in the DAC→ADC chain?

@@ -116,6 +116,7 @@ class dvbs2_tx(gr.top_block, Qt.QWidget):
         self.sps = (options.samp_rate / options.sym_rate) \
             if options.samp_rate is not None else options.sps
         self.sym_rate = options.sym_rate
+        self.tsrate = getattr(options, 'tsrate', 4000000)
         self.usrp = {
             'antenna': options.usrp_antenna,
             'args': options.usrp_args,
@@ -658,7 +659,7 @@ class dvbs2_tx(gr.top_block, Qt.QWidget):
 
         bbheader = dtv.dvb_bbheader_bb(standard, frame_size, code_rate,
                                        rolloff, dtv.INPUTMODE_NORMAL,
-                                       dtv.INBAND_OFF, 168, 4000000)
+                                       dtv.INBAND_OFF, 168, self.tsrate)
         bbscrambler = dtv.dvb_bbscrambler_bb(standard, frame_size, code_rate)
         bch_encoder = dtv.dvb_bch_bb(standard, frame_size, code_rate)
         ldpc_encoder = dtv.dvb_ldpc_bb(standard, frame_size, code_rate,
@@ -856,6 +857,10 @@ def argument_parser():
                         type=eng_float,
                         default=eng_notation.num_to_str(float(1000000)),
                         help="Symbol rate in bauds")
+    parser.add_argument("--tsrate",
+                        type=int,
+                        default=4000000,
+                        help="Transport stream rate in bits per second")
     parser.add_argument("--fullscale",
                         type=float,
                         default=1.0,

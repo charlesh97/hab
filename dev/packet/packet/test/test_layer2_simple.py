@@ -6,12 +6,18 @@ Generates TX waveforms and runs them through the production RX pipeline:
 GNU Radio FLL, RRC matched filter, sync acquisition, Costas loop, and CRC.
 No radio hardware required.
 """
-import sys, os, time
+import os
+import sys
+import time
+from pathlib import Path
+
+_HAB = Path(__file__).resolve().parent.parent.parent.parent.parent
+sys.path.insert(0, str(_HAB / "ground" / "rx"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import numpy as np
 
 from pkt_simple_tx import make_packet, make_test_packets
-from pkt_simple_rx import (
+from demod import (
     PacketDecoder, rcc_taps, scan_frequency,
     SPS, FS, SYNC_BPSK, SYNC_BITS, PRE_SYNC
 )

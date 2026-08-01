@@ -7,7 +7,7 @@
 #   bash test_ota.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RF_LINK_DIR="$SCRIPT_DIR/../../rf"
+HAB_DEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 set -e
 
@@ -18,7 +18,7 @@ echo "=========================================="
 # ── Step 1: Environment ──
 echo ""
 echo "[1/7] Checking environment..."
-source "$RF_LINK_DIR/setup_env.sh" 2>/dev/null
+source "$HAB_DEV_DIR/setup_env.sh" 2>/dev/null
 
 python3 -c "
 from gnuradio import gr
@@ -60,7 +60,7 @@ ffmpeg -y -f lavfi -i "testsrc=duration=5:size=640x360:rate=10" \
 echo "  Test file: $(wc -c < $TS_FILE) bytes"
 
 # Encode
-python3 "$RF_LINK_DIR/dvbs2/tx.py" \
+python3 "$HAB_DEV_DIR/dvbs2/dvbs2/tx.py" \
   --source file --in-file "$TS_FILE" \
   --sink file --out-file "$IQ_FILE" \
   --sym-rate 1e6 --modcod QPSK1/2 \
@@ -68,7 +68,7 @@ python3 "$RF_LINK_DIR/dvbs2/tx.py" \
 echo "  IQ output: $(wc -c < $IQ_FILE) bytes"
 
 # Decode
-timeout 15 python3 "$RF_LINK_DIR/dvbs2/rx.py" \
+timeout 15 python3 "$HAB_DEV_DIR/dvbs2/dvbs2/rx.py" \
   --source file --in-file "$IQ_FILE" \
   --sink file --out-file "$DECODED_FILE" \
   --sym-rate 1e6 --modcod QPSK1/2 \
@@ -89,7 +89,7 @@ kill $(ps aux | grep "dvbs2/rx.py\|dvbs2/tx.py" | grep -v grep | awk '{print $2}
 sleep 1
 
 # Start RX
-python3 "$RF_LINK_DIR/dvbs2/rx.py" \
+python3 "$HAB_DEV_DIR/dvbs2/dvbs2/rx.py" \
   --source hackrf \
   --hackrf-serial "$RX_SERIAL" \
   --hackrf-lna 8 --hackrf-vga 24 --hackrf-amp \
@@ -102,7 +102,7 @@ echo "  RX PID: $RX_PID (serial: $RX_SERIAL)"
 sleep 3
 
 # Start TX
-python3 "$RF_LINK_DIR/dvbs2/tx.py" \
+python3 "$HAB_DEV_DIR/dvbs2/dvbs2/tx.py" \
   --source file --in-file "$TS_FILE" \
   --sink hackrf \
   --hackrf-serial "$TX_SERIAL" \

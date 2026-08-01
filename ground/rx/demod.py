@@ -24,6 +24,7 @@ PRE_SYNC = 256; SYNC_BITS = 32; LEN_BITS = 16; CRC_BITS = 16; MAX_PAYLOAD_BYTES 
 MAX_POST_SYNC = LEN_BITS + (MAX_PAYLOAD_BYTES + 2) * 8  # len + payload + crc
 COSTAS_LOOP_BW = 2 * np.pi / 200
 COSTAS_MAX_OFFSET_HZ = 8_000
+COARSE_MAX_OFFSET_HZ = 150_000
 FLL_LOOP_BW = 2 * np.pi / 400
 FLL_FILTER_SIZE = 45
 FLL_MAX_OFFSET_HZ = 10_000
@@ -51,7 +52,7 @@ def _run_fll(samples):
         (0, FLL_FILTER_SIZE),
     )
     tb = gr.top_block()
-    source = blocks.vector_source_c(normalized.tolist(), False)
+    source = blocks.vector_source_c(normalized, False)
     fll = digital.fll_band_edge_cc(SPS, 0.35, FLL_FILTER_SIZE, FLL_LOOP_BW)
     fll_limit = 2 * np.pi * FLL_MAX_OFFSET_HZ / FS
     fll.set_min_freq(-fll_limit)
@@ -85,10 +86,12 @@ def _fine_fo_estimate(samples, fs=FS):
     # --- square to remove BPSK modulation: s² = A²·exp(j(4πΔf·n/fs + 2φ)) ---
     squared = samples ** 2
 
-    # Decimate to keep FFT computationally reasonable
+    # Decimate to keep FFT computationally reasonable. Preserve enough
+    # bandwidth for the squared tone at 2x the maximum carrier offset.
     max_fft = 256 * 1024
     if len(squared) > max_fft:
-        step = max(1, len(squared) // max_fft)
+        max_step = max(1, int(fs // (4 * COARSE_MAX_OFFSET_HZ)))
+        step = min(max_step, max(1, len(squared) // max_fft))
         squared = squared[::step]
         fs_eff = fs / step
     else:
@@ -101,10 +104,10 @@ def _fine_fo_estimate(samples, fs=FS):
     freqs = np.fft.fftshift(np.fft.fftfreq(n_fft, d=1 / fs_eff))
     power = np.abs(spectrum)
 
-    # Search ±20 kHz around DC (covers Δf ±10 kHz after the ÷2 below)
+    # Search the squared tone over twice the supported input carrier offset.
     dc_idx = n_fft // 2
     bin_width = fs_eff / n_fft
-    search_bins = int(20_000 / bin_width)
+    search_bins = int(2 * COARSE_MAX_OFFSET_HZ / bin_width)
     lo = max(1, dc_idx - search_bins)
     hi = min(n_fft - 1, dc_idx + search_bins + 1)
 
@@ -130,7 +133,12 @@ def _fine_fo_estimate(samples, fs=FS):
     return peak_freq / 2.0            # tone at 2×Δf → divide by 2
 
 
-def scan_frequency(samples, fo_min=-10000, fo_max=10000, step=100):
+def scan_frequency(
+    samples,
+    fo_min=-COARSE_MAX_OFFSET_HZ,
+    fo_max=COARSE_MAX_OFFSET_HZ,
+    step=100,
+):
     """Estimate BPSK carrier offset with sub-Hz accuracy.
 
     Tries the squared-signal FFT estimator first; falls back to the
@@ -146,35 +154,43 @@ def scan_frequency(samples, fo_min=-10000, fo_max=10000, step=100):
     return fo_hz
 
 class PacketDecoder:
-    def __init__(self):
+    def __init__(self, bursts_only=False):
         self.packets_found = 0
+        self.bursts_only = bursts_only
 
-    def _costas_correct(self, complex_syms, initial_fo_hz=0.0, initial_phase=0.0):
-        """Track residual carrier on an aligned packet-symbol window."""
-        complex_syms = np.asarray(complex_syms, dtype=np.complex64)
-        if len(complex_syms) == 0:
-            return complex_syms.copy(), 0.0
+    def _costas_correct(self, samples, initial_fo_hz=0.0, initial_phase=0.0):
+        """Correct one full-rate segment with GNU Radio's Costas loop."""
+        samples = np.asarray(samples, dtype=np.complex64)
+        if len(samples) == 0:
+            return samples.copy(), 0.0
 
-        rms = float(np.sqrt(np.mean(np.abs(complex_syms) ** 2)))
+        rms = float(np.sqrt(np.mean(np.abs(samples) ** 2)))
         if not np.isfinite(rms) or rms < 1e-8:
-            return complex_syms.copy(), 0.0
+            return samples.copy(), 0.0
 
-        normalized = np.asarray(complex_syms / rms, dtype=np.complex64)
+        normalized = np.asarray(samples / rms, dtype=np.complex64)
         tb = gr.top_block()
-        source = blocks.vector_source_c(normalized.tolist(), False)
-        costas = digital.costas_loop_cc(COSTAS_LOOP_BW, 2, False)
-        costas_limit = COSTAS_MAX_OFFSET_HZ * 2 * np.pi * SPS / FS
-        costas.set_min_freq(-costas_limit)
-        costas.set_max_freq(costas_limit)
-        costas.set_frequency(initial_fo_hz * 2 * np.pi * SPS / FS)
+        source = blocks.vector_source_c(normalized, False)
+        # Preserve the former symbol-rate loop dynamics while processing all
+        # SPS samples per symbol. The FFT estimate starts the loop near lock;
+        # its limits allow the loop to track an 8 kHz residual around it.
+        costas = digital.costas_loop_cc(COSTAS_LOOP_BW / SPS, 2, False)
+        radians_per_hz = 2 * np.pi / FS
+        costas.set_min_freq(
+            (initial_fo_hz - COSTAS_MAX_OFFSET_HZ) * radians_per_hz
+        )
+        costas.set_max_freq(
+            (initial_fo_hz + COSTAS_MAX_OFFSET_HZ) * radians_per_hz
+        )
+        costas.set_frequency(initial_fo_hz * radians_per_hz)
         costas.set_phase(initial_phase)
         sink = blocks.vector_sink_c()
         tb.connect(source, costas, sink)
         tb.run()
 
         corrected = np.asarray(sink.data(), dtype=np.complex64)
-        residual_fo_hz = float(costas.get_frequency()) * FS / (2 * np.pi * SPS)
-        return corrected, residual_fo_hz
+        tracked_fo_hz = float(costas.get_frequency()) / radians_per_hz
+        return corrected, tracked_fo_hz
 
     @staticmethod
     def _decode_post_sync(post_syms):
@@ -213,12 +229,17 @@ class PacketDecoder:
         return None
 
     @staticmethod
-    def _burst_regions(samples, block_samples=2048):
+    def _burst_regions(
+        samples,
+        block_samples=2048,
+        require_burst=False,
+    ):
         """Find gapped RF bursts, returning guarded sample ranges.
 
         When the capture is continuous or has no clear energy contrast, the
         whole vector is returned so carrier loops retain their streaming
-        behavior. A one-block hole is merged to tolerate shaped packet edges.
+        behavior, unless ``require_burst`` asks to skip it. A one-block hole
+        is merged to tolerate shaped packet edges.
         """
         samples = np.asarray(samples)
         if len(samples) < block_samples * 4:
@@ -233,14 +254,16 @@ class PacketDecoder:
         noise_rms = float(np.percentile(block_rms, 30))
         signal_rms = float(np.percentile(block_rms, 99))
         if not np.isfinite(noise_rms + signal_rms):
-            return [(0, len(samples))]
-        if signal_rms < max(noise_rms * 1.8, noise_rms + 1e-4):
-            return [(0, len(samples))]
+            return [] if require_burst else [(0, len(samples))]
+        minimum_ratio = 1.10 if require_burst else 1.8
+        if signal_rms < max(noise_rms * minimum_ratio, noise_rms + 1e-4):
+            return [] if require_burst else [(0, len(samples))]
 
-        threshold = noise_rms + 0.25 * (signal_rms - noise_rms)
+        threshold_fraction = 0.20 if require_burst else 0.25
+        threshold = noise_rms + threshold_fraction * (signal_rms - noise_rms)
         active_blocks = np.flatnonzero(block_rms > threshold)
         if len(active_blocks) == 0:
-            return [(0, len(samples))]
+            return [] if require_burst else [(0, len(samples))]
 
         # Split only when at least two inactive blocks separate bursts.
         splits = np.flatnonzero(np.diff(active_blocks) > 2) + 1
@@ -259,7 +282,9 @@ class PacketDecoder:
             else:
                 regions.append((start, end))
 
-        return regions or [(0, len(samples))]
+        if regions:
+            return regions
+        return [] if require_burst else [(0, len(samples))]
 
     def decode(self, samples_complex, raw_signal=None):
         samples = np.asarray(samples_complex, dtype=np.complex64)
@@ -271,7 +296,10 @@ class PacketDecoder:
 
         results = []
         sync_positions = []
-        for start, end in self._burst_regions(samples):
+        for start, end in self._burst_regions(
+            samples,
+            require_burst=self.bursts_only,
+        ):
             for result in self._decode_segment(samples[start:end]):
                 absolute_sync = start + result[3] + result[4] * SPS
                 if any(abs(absolute_sync - prior) <= SPS for prior in sync_positions):
@@ -303,15 +331,16 @@ class PacketDecoder:
             coarse_fo = _fine_fo_estimate(np.asarray(raw_signal, dtype=np.complex64))
             if abs(coarse_fo) < 0.5:
                 _, coarse_fo = _run_fll(np.asarray(raw_signal, dtype=np.complex64))
-        t = np.arange(len(samples))
-        bb = samples * np.exp(-2j * np.pi * coarse_fo * t / FS)
-
         rrc = rcc_taps()
-        filt = np.convolve(bb, rrc, 'same')
+        filt = np.convolve(samples, rrc, 'same')
+        corrected, tracked_fo = self._costas_correct(
+            filt,
+            initial_fo_hz=coarse_fo,
+        )
 
         phase_streams = []
         for phase in range(SPS):
-            symbols = filt[phase::SPS]
+            symbols = corrected[phase::SPS]
             if len(symbols) < PRE_SYNC + SYNC_BITS + LEN_BITS + 8:
                 continue
 
@@ -321,9 +350,7 @@ class PacketDecoder:
         # Track every established SPS phase. Eye-amplitude ranking is not
         # reliable for arbitrary payload statistics and pulse transitions.
         for phase, symbols in phase_streams:
-            corrected, residual_fo = self._costas_correct(symbols)
-
-            corr = np.correlate(corrected, SYNC_BPSK, 'valid')
+            corr = np.correlate(symbols, SYNC_BPSK, 'valid')
             cp = np.abs(corr)
             th = np.mean(cp) + 3.5 * np.std(cp)
 
@@ -339,24 +366,26 @@ class PacketDecoder:
                     float(cp[i]),
                     phase,
                     i,
-                    corrected,
+                    symbols,
                     phase + i * SPS,
-                    residual_fo,
+                    tracked_fo,
                 ))
 
         results = []
         decoded_positions = []
-        for _, phase, sync_idx, corrected, absolute_sync, residual_fo in sorted(
+        for _, phase, sync_idx, symbols, absolute_sync, tracked_fo in sorted(
             candidates,
             key=lambda item: (item[4], -item[0]),
         ):
             if any(abs(absolute_sync - prior) <= SPS for prior in decoded_positions):
                 continue
             post_start = sync_idx + SYNC_BITS
-            if len(corrected) < post_start + LEN_BITS + 8:
+            if len(symbols) < post_start + LEN_BITS + 8:
                 continue
 
-            decoded = self._decode_post_sync(corrected[post_start:post_start + MAX_POST_SYNC + 7])
+            decoded = self._decode_post_sync(
+                symbols[post_start:post_start + MAX_POST_SYNC + 7]
+            )
             if decoded is None:
                 continue
 
@@ -365,7 +394,7 @@ class PacketDecoder:
             results.append((
                 payload,
                 length + 10,
-                coarse_fo + residual_fo,
+                tracked_fo,
                 phase,
                 sync_idx,
                 length,

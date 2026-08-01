@@ -98,7 +98,7 @@ export function SettingsRf({ sendCommand, sdrStatus, selectedSerial }: SettingsR
 
   const txFrequencyHz = Math.round((freqMHz + offsetMHz) * 1e6);
   const tsBitrate = Math.round((BITRATE_LOOKUP[modcod] || 965) * symRateMsps);
-  const txCommand = `python3 rf/dvbs2/tx.py --freq ${txFrequencyHz} --modcod ${modcod} --sym-rate ${Math.round(symRateMsps * 1e6)} --rolloff 0.2 --amp --hackrf-vga 47 --pilots`;
+  const txCommand = `python3 dev/dvbs2/dvbs2/tx.py --freq ${txFrequencyHz} --modcod ${modcod} --sym-rate ${Math.round(symRateMsps * 1e6)} --rolloff 0.2 --amp --hackrf-vga 47 --pilots`;
 
   return (
     <div className="space-y-6">

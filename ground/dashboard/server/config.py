@@ -22,6 +22,7 @@ class ReceiverConfig:
     freq_hz: int = 433_500_000
     sample_rate: int = 2_000_000
     symbol_rate: int = 100_000
+    server_port: int = 8000
     sps: int = 20
     gain_lna: int = 32
     gain_vga: int = 40

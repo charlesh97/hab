@@ -6,12 +6,27 @@ Tests CRC-16, length field, packet construction, burst structure,
 sync word integrity, and silence rejection. Does NOT test the full
 RX decode pipeline — that's Layer 2 (software loopback).
 """
-import sys, os, struct
+import os
+import struct
+import sys
+from pathlib import Path
+
+_HAB = Path(__file__).resolve().parent.parent.parent.parent.parent
+sys.path.insert(0, str(_HAB / "ground" / "rx"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import numpy as np
 
 from pkt_simple_tx import FS, crc16, make_packet, make_test_packets
-from pkt_simple_rx import PacketDecoder, SYNC_WORD, SYNC_BITS, PRE_SYNC, LEN_BITS, CRC_BITS, MAX_PAYLOAD_BYTES, SPS
+from demod import (
+    CRC_BITS,
+    LEN_BITS,
+    MAX_PAYLOAD_BYTES,
+    PRE_SYNC,
+    SPS,
+    SYNC_BITS,
+    SYNC_WORD,
+    PacketDecoder,
+)
 
 
 # ── CRC-16 Tests ──────────────────────────────────────────

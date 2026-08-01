@@ -7,9 +7,11 @@ import asyncio
 import json
 import logging
 import sqlite3
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 
 from models import ReceiverState, SpectrumFrame
 from config import ReceiverConfig
@@ -114,30 +116,24 @@ class ReceiverManager:
                 setattr(self._config, key, updates[key])
 
     async def _start_receiver(self):
-        """Launch the enhanced packet receiver as a subprocess.
-
-        Spawns pkt_simple_rx.py with the configured SDR parameters and
-        starts a background task that reads decoded packets from stdout
-        and feeds them to ingest_packet().
-        """
-        import os, re
-
-        hab_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..")
-        )
-        rx_script = os.path.join(
-            hab_root, "rf", "packet", "src", "pkt_simple_rx.py"
-        )
-        if not os.path.exists(rx_script):
+        """Launch the composite video and telemetry receiver."""
+        hab_root = Path(__file__).resolve().parent.parent.parent.parent
+        rx_script = hab_root / "ground" / "rx" / "combined_rx.py"
+        if not rx_script.is_file():
             raise FileNotFoundError(f"RX script not found: {rx_script}")
 
+        server_port = getattr(self._config, "server_port", 8000)
+        dashboard_url = f"http://localhost:{server_port}/api/packet"
         cmd = [
-            "/opt/homebrew/bin/python3.14",
-            rx_script,
-            "--freq", str(int(self._config.freq_hz)),
-            "--duration", "0",   # run until stopped via SIGTERM
-            "--lna", str(self._config.gain_lna or 16),
-            "--vga", str(self._config.gain_vga or 24),
+            sys.executable,
+            str(rx_script),
+            "--center-freq", str(int(self._config.freq_hz)),
+            "--sample-rate", "4000000",
+            "--lna", str(self._config.gain_lna or 32),
+            "--vga", str(self._config.gain_vga or 40),
+            "--udp-host", "127.0.0.1",
+            "--udp-port", "1234",
+            "--dashboard", dashboard_url,
         ]
         if getattr(self._config, "gain_amp", False):
             cmd.append("--amp")
@@ -148,42 +144,22 @@ class ReceiverManager:
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ,
-                 "PYTHONPATH": ":".join([
-                     "/opt/homebrew/lib/python3.14/site-packages",
-                     os.path.join(hab_root, "rf", "packet", "src"),
-                     os.path.join(hab_root, "rf", "packet"),
-                 ])},
         )
         self._bridge_task = asyncio.create_task(
             self._read_receiver_lines()
         )
 
     async def _read_receiver_lines(self):
-        """Read decoded packet lines from the RX subprocess stdout."""
-        import re
-
-        # Pattern: [EnhancedRX] #N ... | 'message'
-        pkt_re = re.compile(r"\[EnhancedRX\]\s+#(\d+).*?\|\s*['\"](.+?)['\"]")
-
+        """Log output from the composite receiver until it exits."""
         try:
             if self._receiver is None or self._receiver.stdout is None:
                 return
             async for line in self._receiver.stdout:
                 line = line.decode("utf-8", errors="replace").strip()
-                match = pkt_re.search(line)
-                if match:
-                    seq = int(match.group(1))
-                    text = match.group(2)
-                    await self.ingest_packet({
-                        "type": "power",
-                        "seq": seq,
-                        "raw": text,
-                        "bat_v": 0.0, "bat_a": 0.0, "bat_w": 0.0,
-                        "bat_pct": 100, "bat_temp_c": 25.0,
-                    })
-                elif "FO estimate" in line or "Opening" in line:
+                if line:
                     logger.info("RX: %s", line)
+            return_code = await self._receiver.wait()
+            logger.info("RX process exited with status %d", return_code)
         except asyncio.CancelledError:
             pass
         except Exception:
