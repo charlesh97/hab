@@ -130,7 +130,7 @@ exec /opt/homebrew/bin/python3.14 -u ground/rx/combined_rx.py \
 
 ## 3. Video bridge + still grab
 
-The composite RX spawns a **one-shot** ffmpeg bridge: `udp://127.0.0.1:1234` → MJPEG served once on `:8001/video`. It accepts **one** client then exits.
+The composite RX spawns an ffmpeg MJPEG bridge: `udp://127.0.0.1:1234` → MJPEG served on `:8001/video`. The bridge is one-shot (accepts **one** client then exits), but the RX runs a supervisor thread that kills stale bridges on startup and **auto-respawns the bridge within ~5 s** whenever it exits (client served, crash, or never bound). CameraFeed can be refreshed as often as you like.
 
 Manual bridge (for a single still):
 
@@ -205,9 +205,12 @@ duty. The live capture will show ~100% duty too; the Rock 2A encoder gaps
 2. **Encoder ceiling ~4 MS/s** — the RK3528 is single-core-bound. Design the
    link around it (Option A above). Don't raise `--sym-rate` back to 2e6
    without also dropping video resolution/CPU load.
-3. **Stale ffmpeg bridge on UDP:1234** steals the TS stream — always
-   `pkill -f "udp://127.0.0.1:1234"` before starting RX.
-4. **One-shot bridge**: serves exactly one client. Lsof-probe only.
+3. **Stale ffmpeg bridge on UDP:1234** steals the TS stream — the RX
+   supervisor now kills stale bridges on startup, but if you run a manual
+   bridge or another grabber, `pkill -f "udp://127.0.0.1:1234"` first.
+4. **Bridge is one-shot per client, auto-respawned by the RX supervisor**
+   (~5 s cadence). Lsof-probe only — a `connect()`/`curl` is the bridge's
+   one client and consumes it (harmless now: it respawns).
 5. **`nohup … &` RX launch fails** on macOS (exit −1) — use the
    `exec … > log 2>&1` form; kill both wrapper + python PIDs to stop.
 6. **Rock 2A SSH is flaky (rc 255)**: single commands or script files only,

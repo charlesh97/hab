@@ -40,6 +40,23 @@ BPSK_CHANNEL_CUTOFF_HZ = 180_000.0
 CHANNEL_FILTER_TAPS = 129
 BPSK_DECODE_SAMPLES = 1_048_576
 DECODER_OVERLAP_SAMPLES = 30_000
+VIDEO_PORT = 8001
+
+
+def _wait_listener(port: int, timeout: float = 8.0) -> bool:
+    """Wait for a TCP listener without consuming its first connection."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def _next_fast_fft_size(minimum: int) -> int:
@@ -306,6 +323,7 @@ class CompositeReceiver:
         self._post_worker: Thread | None = None
         self.hackrf_proc: subprocess.Popen | None = None
         self.video_bridge: subprocess.Popen | None = None
+        self._video_bridge_worker: Thread | None = None
         self.stop_requested = False
         self.mixer_phase = 0.0
         self._mixer_oscillators: dict[int, np.ndarray] = {}
@@ -422,6 +440,86 @@ class CompositeReceiver:
             lna_db, vga_db, self.args.amp,
             "DVB-S2 only" if self.args.no_bpsk else "DVB-S2+BPSK",
         )
+
+    def _kill_stale_video_bridges(self) -> None:
+        try:
+            result = subprocess.run(
+                [
+                    "pgrep",
+                    "-f",
+                    f"udp://127.0.0.1:{self.args.udp_port}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            for pid_text in result.stdout.strip().splitlines():
+                if pid_text and int(pid_text) != os.getpid():
+                    os.kill(int(pid_text), signal.SIGKILL)
+                    LOG.info("Killed stale video bridge pid %s", pid_text)
+        except Exception as exc:
+            self.errors.warning(
+                "video-bridge-stale",
+                "Failed to kill stale video bridge: %s",
+                exc,
+            )
+
+    def _spawn_video_bridge(self) -> subprocess.Popen | None:
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-i",
+            f"udp://127.0.0.1:{self.args.udp_port}",
+            "-c:v",
+            "mjpeg",
+            "-q:v",
+            "5",
+            "-f",
+            "mpjpeg",
+            "-listen",
+            "1",
+            f"http://0.0.0.0:{VIDEO_PORT}/video",
+        ]
+        for _attempt in range(2):
+            if self.stop_requested:
+                return None
+            bridge = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if _wait_listener(VIDEO_PORT, timeout=14.0):
+                return bridge
+            try:
+                bridge.kill()
+            except ProcessLookupError:
+                pass
+        return None
+
+    def _video_bridge_supervisor(self) -> None:
+        self._kill_stale_video_bridges()
+        while not self.stop_requested:
+            if (
+                self.video_bridge is None
+                or self.video_bridge.poll() is not None
+            ):
+                if self.stop_requested:
+                    break
+                bridge = self._spawn_video_bridge()
+                if self.stop_requested:
+                    if bridge is not None and bridge.poll() is None:
+                        bridge.terminate()
+                        try:
+                            bridge.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            bridge.kill()
+                            bridge.wait(timeout=2)
+                    break
+                self.video_bridge = bridge
+            time.sleep(5)
 
     def _channel_filter_taps(self) -> np.ndarray:
         indexes = np.arange(CHANNEL_FILTER_TAPS) - (
@@ -560,28 +658,11 @@ class CompositeReceiver:
                 self._decode_worker.start()
             if not self.args.no_dvbs2:
                 self.dvbs2.start()
-                self.video_bridge = subprocess.Popen(
-                    [
-                        "ffmpeg",
-                        "-hide_banner",
-                        "-loglevel",
-                        "warning",
-                        "-i",
-                        f"udp://127.0.0.1:{self.args.udp_port}",
-                        "-c:v",
-                        "mjpeg",
-                        "-q:v",
-                        "5",
-                        "-f",
-                        "mpjpeg",
-                        "-listen",
-                        "1",
-                        "http://0.0.0.0:8001/video",
-                    ],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                self._video_bridge_worker = Thread(
+                    target=self._video_bridge_supervisor,
+                    daemon=True,
                 )
+                self._video_bridge_worker.start()
             self._open_hackrf_transfer()
             chunk_bytes = CHUNK_SAMPLES * 2  # 2 bytes per SC8 sample (I+Q)
             while not self.stop_requested:

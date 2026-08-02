@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import signal
+import subprocess
 import time
 from unittest import mock
 
@@ -9,6 +12,7 @@ from ground.rx.combined_rx import (
     BPSK_DECODE_SAMPLES,
     CHANNEL_FILTER_TAPS,
     CHUNK_SAMPLES,
+    VIDEO_PORT,
     CompositeReceiver,
     parse_args,
 )
@@ -229,3 +233,192 @@ def test_no_bpsk_mode_does_not_initialize_channel_filter() -> None:
 
     assert receiver.args.offset == 0.0
     assert not hasattr(receiver, "channel_taps")
+
+
+def test_video_bridge_spawn_retries_once_when_listener_does_not_bind() -> None:
+    receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
+    first_bridge = mock.Mock()
+    second_bridge = mock.Mock()
+
+    with (
+        mock.patch(
+            "ground.rx.combined_rx.subprocess.Popen",
+            side_effect=[first_bridge, second_bridge],
+        ) as popen,
+        mock.patch(
+            "ground.rx.combined_rx._wait_listener",
+            side_effect=[False, True],
+        ) as wait_listener,
+    ):
+        bridge = receiver._spawn_video_bridge()
+
+    assert bridge is second_bridge
+    assert popen.call_count == 2
+    assert wait_listener.call_args_list == [
+        mock.call(VIDEO_PORT, timeout=14.0),
+        mock.call(VIDEO_PORT, timeout=14.0),
+    ]
+    first_bridge.kill.assert_called_once_with()
+
+
+def test_video_bridge_supervisor_replaces_exited_bridge() -> None:
+    receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
+    exited_bridge = mock.Mock()
+    exited_bridge.poll.return_value = 0
+    replacement = mock.Mock()
+    receiver.video_bridge = exited_bridge
+    listener = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="ffmpeg 123 user 4u IPv4 TCP *:8001 (LISTEN)\n",
+    )
+
+    def stop_after_check(_seconds: float) -> None:
+        receiver.stop_requested = True
+
+    with (
+        mock.patch.object(receiver, "_kill_stale_video_bridges") as kill_stale,
+        mock.patch(
+            "ground.rx.combined_rx.subprocess.Popen",
+            return_value=replacement,
+        ) as popen,
+        mock.patch(
+            "ground.rx.combined_rx.subprocess.run",
+            return_value=listener,
+        ) as run,
+        mock.patch(
+            "ground.rx.combined_rx.time.sleep",
+            side_effect=stop_after_check,
+        ),
+    ):
+        receiver._video_bridge_supervisor()
+
+    kill_stale.assert_called_once_with()
+    assert receiver.video_bridge is replacement
+    popen.assert_called_once_with(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-i",
+            f"udp://127.0.0.1:{receiver.args.udp_port}",
+            "-c:v",
+            "mjpeg",
+            "-q:v",
+            "5",
+            "-f",
+            "mpjpeg",
+            "-listen",
+            "1",
+            f"http://0.0.0.0:{VIDEO_PORT}/video",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    run.assert_called_once_with(
+        ["lsof", "-nP", f"-iTCP:{VIDEO_PORT}", "-sTCP:LISTEN"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+
+def test_video_bridge_supervisor_does_not_respawn_after_stop() -> None:
+    receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
+    live_bridge = mock.Mock()
+    live_bridge.poll.return_value = None
+    receiver.video_bridge = live_bridge
+
+    def request_stop(_seconds: float) -> None:
+        receiver.stop_requested = True
+        live_bridge.poll.return_value = 0
+
+    with (
+        mock.patch.object(receiver, "_kill_stale_video_bridges"),
+        mock.patch.object(receiver, "_spawn_video_bridge") as spawn_bridge,
+        mock.patch(
+            "ground.rx.combined_rx.time.sleep",
+            side_effect=request_stop,
+        ),
+    ):
+        receiver._video_bridge_supervisor()
+
+    spawn_bridge.assert_not_called()
+
+
+def test_video_bridge_stale_cleanup_skips_current_process() -> None:
+    receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
+    stale_pid = os.getpid() + 1000
+    result = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=f"{os.getpid()}\n{stale_pid}\n",
+    )
+
+    with (
+        mock.patch(
+            "ground.rx.combined_rx.subprocess.run",
+            return_value=result,
+        ) as run,
+        mock.patch("ground.rx.combined_rx.os.kill") as kill,
+    ):
+        receiver._kill_stale_video_bridges()
+
+    run.assert_called_once_with(
+        ["pgrep", "-f", f"udp://127.0.0.1:{receiver.args.udp_port}"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    kill.assert_called_once_with(stale_pid, signal.SIGKILL)
+
+
+def test_no_dvbs2_does_not_start_video_bridge_supervisor() -> None:
+    receiver = CompositeReceiver(
+        parse_args(["--no-bpsk", "--no-dvbs2"])
+    )
+    hackrf = mock.Mock()
+    hackrf.stdout.read.return_value = b""
+    hackrf.poll.return_value = 1
+    receiver.hackrf_proc = hackrf
+
+    with (
+        mock.patch("ground.rx.combined_rx.Thread") as thread,
+        mock.patch.object(receiver, "_open_hackrf_transfer"),
+        mock.patch.object(receiver, "_spawn_video_bridge") as spawn_bridge,
+        mock.patch.object(receiver.dvbs2, "start") as start_dvbs2,
+        mock.patch.object(receiver.dvbs2, "close"),
+    ):
+        receiver.run()
+
+    spawn_bridge.assert_not_called()
+    start_dvbs2.assert_not_called()
+    assert receiver._video_bridge_worker is None
+    assert all(
+        call.kwargs["target"] != receiver._video_bridge_supervisor
+        for call in thread.call_args_list
+    )
+
+
+def test_shutdown_terminates_live_video_bridge() -> None:
+    receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
+    bridge = mock.Mock()
+    bridge.poll.return_value = None
+    receiver.video_bridge = bridge
+    hackrf = mock.Mock()
+    hackrf.stdout.read.return_value = b""
+    hackrf.poll.return_value = 1
+    receiver.hackrf_proc = hackrf
+
+    with (
+        mock.patch("ground.rx.combined_rx.Thread"),
+        mock.patch.object(receiver, "_open_hackrf_transfer"),
+        mock.patch.object(receiver.dvbs2, "start"),
+        mock.patch.object(receiver.dvbs2, "close"),
+    ):
+        receiver.run()
+
+    bridge.terminate.assert_called_once_with()
+    bridge.wait.assert_called_once_with(timeout=5)
