@@ -415,12 +415,28 @@ export function useHabApi() {
     if (statuses.every((s) => s === 'NOMINAL')) return 'NOMINAL';
     return 'DEGRADED';
   }, [connected, newLinkStatus]);
+
   useEffect(() => {
-    setNewLinkStatus((prev) => ({
-      ...prev,
-      video: engineStatus?.pipeline?.running ? 'NOMINAL' : 'OFFLINE',
-    }));
-  }, [engineStatus?.pipeline?.running]);
+    const host = window.location.hostname;
+
+    const pollVideoStatus = async () => {
+      try {
+        const res = await fetch(`http://${host}:8000/api/video-status`);
+        if (!res.ok) return;
+        const json: { up?: boolean } = await res.json();
+        setNewLinkStatus((prev) => ({
+          ...prev,
+          video: json.up === true ? 'NOMINAL' : 'OFFLINE',
+        }));
+      } catch {
+        // Keep the previous status when the dashboard server is unavailable.
+      }
+    };
+
+    void pollVideoStatus();
+    const interval = setInterval(pollVideoStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const ROLLING_WINDOW_MS = 60_000;
 

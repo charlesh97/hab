@@ -3,6 +3,7 @@
 
 import json
 import sqlite3
+import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -14,6 +15,26 @@ def create_rest_router(receiver_manager=None, ws_manager=None):
     @router.get("/health")
     async def health():
         return {"status": "ok"}
+
+    @router.get("/api/video-status")
+    async def video_status():
+        """Report whether the MJPEG video bridge is listening on :8001.
+
+        Uses lsof to inspect LISTEN state WITHOUT connecting: the one-shot bridge
+        treats the first accepted connection as its single client and exits, so a
+        connect-based probe would kill the feed it is probing.
+        """
+        try:
+            result = subprocess.run(
+                ["lsof", "-nP", "-iTCP:8001", "-sTCP:LISTEN"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            up = result.returncode == 0 and bool(result.stdout.strip())
+        except Exception:
+            up = False
+        return {"up": up}
 
     @router.get("/api/packets")
     async def get_packets(since: Optional[int] = Query(None)):
