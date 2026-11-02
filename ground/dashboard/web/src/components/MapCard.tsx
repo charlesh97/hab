@@ -2,18 +2,13 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 import L from 'leaflet';
-
-interface PositionPoint {
-  seq: number;
-  lat: number;
-  lon: number;
-  alt_m: number;
-}
+import { hasNonZeroCoordinates, PositionPoint } from '../utils/position';
 
 interface MapCardProps {
   lat: number;
   lon: number;
   alt_m: number;
+  fix: boolean;
   loadPositions: (since: number) => Promise<PositionPoint[]>;
 }
 
@@ -67,11 +62,12 @@ function LocateButton({ lat, lon }: { lat: number; lon: number }) {
   return null;
 }
 
-export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
+export function MapCard({ lat, lon, alt_m, fix, loadPositions }: MapCardProps) {
   const [trail, setTrail] = useState<LatLngTuple[]>([]);
   const [lastLoadedSeq, setLastLoadedSeq] = useState(0);
   const mapRef = useRef<L.Map | null>(null);
   const prevPositionRef = useRef<LatLngTuple | null>(null);
+  const hasCurrentPosition = fix && hasNonZeroCoordinates(lat, lon);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +83,7 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!hasCurrentPosition) return;
     const pos: LatLngTuple = [lat, lon];
     if (
       prevPositionRef.current &&
@@ -97,7 +94,7 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
     }
     prevPositionRef.current = pos;
     setTrail((prev) => [...prev, pos]);
-  }, [lat, lon]);
+  }, [lat, lon, hasCurrentPosition]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -115,15 +112,15 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
   }, [lastLoadedSeq, loadPositions]);
 
   useEffect(() => {
-    if (mapRef.current) {
+    if (mapRef.current && hasCurrentPosition) {
       mapRef.current.panTo([lat, lon], { animate: true, duration: 1 });
     }
-  }, [lat, lon]);
+  }, [lat, lon, hasCurrentPosition]);
 
   const center: LatLngTuple = useMemo(() => {
     if (trail.length > 0) return trail[trail.length - 1];
-    return [lat || 39.0, lon || -98.0] as LatLngTuple;
-  }, [trail, lat, lon]);
+    return hasCurrentPosition ? [lat, lon] : [39.0, -98.0];
+  }, [trail, lat, lon, hasCurrentPosition]);
 
   return (
     <div className="card-border bg-surface-container-low rounded-[20px] border border-outline-variant flex flex-col h-full min-h-[200px]">
@@ -146,22 +143,24 @@ export function MapCard({ lat, lon, alt_m, loadPositions }: MapCardProps) {
           {trail.length >= 2 && (
             <Polyline positions={trail} pathOptions={TRAIL_COLOR} />
           )}
-          <CircleMarker
-            center={[lat, lon]}
-            radius={5}
-            pathOptions={{ color: '#abc7ff', fillColor: '#abc7ff', fillOpacity: 0.8, weight: 2 }}
-          >
-            <Popup>
-              <div className="text-xs font-mono">
-                <div>{formatLatLng(lat, lon)}</div>
-                <div>Altitude: {alt_m.toFixed(0)} m</div>
-              </div>
-            </Popup>
-          </CircleMarker>
-          <LocateButton lat={lat} lon={lon} />
+          {hasCurrentPosition && (
+            <CircleMarker
+              center={[lat, lon]}
+              radius={5}
+              pathOptions={{ color: '#abc7ff', fillColor: '#abc7ff', fillOpacity: 0.8, weight: 2 }}
+            >
+              <Popup>
+                <div className="text-xs font-mono">
+                  <div>{formatLatLng(lat, lon)}</div>
+                  <div>Altitude: {alt_m.toFixed(0)} m</div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          )}
+          {hasCurrentPosition && <LocateButton lat={lat} lon={lon} />}
         </MapContainer>
         <div className="absolute bottom-2 left-2 right-2 bg-surface/80 p-2 text-[10px] font-mono card-border border border-outline-variant/50 rounded z-[1000] pointer-events-none">
-          {formatLatLng(lat, lon)} | Alt: {alt_m.toFixed(0)}m
+          {hasCurrentPosition ? `${formatLatLng(lat, lon)} | Alt: ${alt_m.toFixed(0)}m` : 'NO FIX'}
         </div>
       </div>
     </div>

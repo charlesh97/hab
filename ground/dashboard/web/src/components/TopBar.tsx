@@ -1,4 +1,5 @@
 import { FlightPhase } from '../types';
+import { hasNonZeroCoordinates } from '../utils/position';
 
 const phaseColors: Record<FlightPhase, string> = {
   'PRE-LAUNCH': 'bg-slate-700 text-slate-300',
@@ -14,6 +15,7 @@ interface TopBarProps {
   connected: boolean;
   currentLat?: number;
   currentLon?: number;
+  currentFix?: boolean;
   lastPacketAge?: number;
 }
 
@@ -30,7 +32,12 @@ function lastPacketColor(age: number): string {
   return 'text-reentry-red';
 }
 
-export function TopBar({ phase, missionTime, connected, currentLat, currentLon, lastPacketAge = 1.2 }: TopBarProps) {
+export function TopBar({ phase, missionTime, connected, currentLat, currentLon, currentFix, lastPacketAge = 1.2 }: TopBarProps) {
+  const hasCurrentPosition = currentFix === true
+    && currentLat !== undefined
+    && currentLon !== undefined
+    && hasNonZeroCoordinates(currentLat, currentLon);
+
   return (
     <header className="fixed top-0 left-[64px] right-0 h-[72px] bg-surface flex justify-between items-center px-[12px] z-50 border-b border-outline-variant">
       <div className="flex items-center gap-6">
@@ -41,7 +48,11 @@ export function TopBar({ phase, missionTime, connected, currentLat, currentLon, 
           <div className="flex gap-4 text-[10px] text-outline font-mono">
             <span>ID: #521514</span>
             {currentLat !== undefined && currentLon !== undefined && (
-              <span>COORDS: {currentLat.toFixed(4)}°N / {currentLon.toFixed(4)}°W</span>
+              <span>
+                COORDS: {hasCurrentPosition
+                  ? `${currentLat.toFixed(4)}°N / ${currentLon.toFixed(4)}°W`
+                  : 'NO FIX'}
+              </span>
             )}
           </div>
         </div>

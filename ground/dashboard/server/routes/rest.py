@@ -18,20 +18,25 @@ def create_rest_router(receiver_manager=None, ws_manager=None):
 
     @router.get("/api/video-status")
     async def video_status():
-        """Report whether the MJPEG video bridge is listening on :8001.
+        """Report whether the MJPEG video bridge has a socket on :8001.
 
-        Uses lsof to inspect LISTEN state WITHOUT connecting: the one-shot bridge
-        treats the first accepted connection as its single client and exits, so a
-        connect-based probe would kill the feed it is probing.
+        Uses lsof WITHOUT connecting: the one-shot bridge treats the first
+        accepted connection as its single client and exits, so a connect-based
+        probe would kill the feed it is probing. Checks LISTEN (available) OR
+        ESTABLISHED (actively serving a client) — reporting only LISTEN made
+        the badge flip OFFLINE mid-stream, which unmounted the feed and killed
+        the stream it was reporting on.
         """
         try:
             result = subprocess.run(
-                ["lsof", "-nP", "-iTCP:8001", "-sTCP:LISTEN"],
+                ["lsof", "-nP", "-iTCP:8001"],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            up = result.returncode == 0 and bool(result.stdout.strip())
+            up = result.returncode == 0 and any(
+                "ffmpeg" in line for line in result.stdout.splitlines()
+            )
         except Exception:
             up = False
         return {"up": up}

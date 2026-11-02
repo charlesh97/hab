@@ -9,6 +9,7 @@ import {
   MetricPoint,
   EngineStatus,
 } from '../types';
+import { PositionPoint } from '../utils/position';
 
 interface MissionControlProps {
   position: PositionData;
@@ -27,7 +28,7 @@ interface MissionControlProps {
     pitch: MetricPoint[];
     yaw: MetricPoint[];
   };
-  loadPositions: (since: number) => Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>>;
+  loadPositions: (since: number) => Promise<PositionPoint[]>;
   sendCommand: (command: string, data?: any) => void;
   sdrStatus: any;
   engineStatus: EngineStatus | null;
@@ -53,7 +54,13 @@ export function MissionControl({
     >
       {/* Left Column: Map */}
       <section className="min-h-[300px] overflow-hidden">
-        <MapCard lat={position.lat} lon={position.lon} alt_m={position.alt_m} loadPositions={loadPositions} />
+        <MapCard
+          lat={position.lat}
+          lon={position.lon}
+          alt_m={position.alt_m}
+          fix={position.fix}
+          loadPositions={loadPositions}
+        />
       </section>
 
       {/* Center Column: Video Feed */}

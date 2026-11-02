@@ -9,6 +9,7 @@ import {
   LogEntry, DashboardLogEntry, TelemetryMessage, MetricPoint, ConnectionLogEntry,
 } from '../types';
 import { EngineStatus } from '../types';
+import { isPlottablePosition, PositionPoint } from '../utils/position';
 
 interface WsMessage {
   type: string;
@@ -452,12 +453,13 @@ export function useHabApi() {
     setMetricHistory({ ...metricHistoryRef.current });
   }
 
-  const loadPositions = useCallback(async (since = 0): Promise<Array<{seq: number; lat: number; lon: number; alt_m: number}>> => {
+  const loadPositions = useCallback(async (since = 0): Promise<PositionPoint[]> => {
     try {
       const host = window.location.hostname;
       const res = await fetch(`http://${host}:8000/api/positions?since=${since}&limit=5000`);
       if (!res.ok) return [];
-      return await res.json();
+      const positions: PositionPoint[] = await res.json();
+      return positions.filter(isPlottablePosition);
     } catch {
       return [];
     }

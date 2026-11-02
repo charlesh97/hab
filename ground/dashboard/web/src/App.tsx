@@ -59,6 +59,7 @@ export function App() {
         connected={connected}
         currentLat={position.lat}
         currentLon={position.lon}
+        currentFix={position.fix}
         lastPacketAge={lastPacketAge}
       />
 
