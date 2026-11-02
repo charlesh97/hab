@@ -9,6 +9,7 @@ import functools
 import logging
 import math
 import os
+import re
 import select
 import shlex
 import signal
@@ -48,6 +49,7 @@ MAX_DVBS2_RESTARTS = 3
 MAX_FFMPEG_RESTARTS = 3
 ERROR_LOG_INTERVAL = 10.0
 DEFAULT_SYMBOL_RATE = 2_000_000.0
+GPIOSET_BIN = "/usr/bin/gpioset"
 TIMESTAMP_OVERLAY_FILTER = (
     r"drawtext=text='%{localtime\:%Y-%m-%d %H\\\:%M\\\:%S}':"
     "fontcolor=white:fontsize=32:x=20:y=20:"
@@ -111,6 +113,136 @@ class RateLimitedLogger:
             LOG.error(message, *args)
 
 
+def _gpio_spec(value: str) -> str:
+    """Validate and preserve a ``gpiochip:line`` command-line value."""
+    try:
+        chip, line_text = value.rsplit(":", 1)
+        line = int(line_text)
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            "GPIO must use gpiochip:line format (for example gpiochip1:9)"
+        ) from exc
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", chip) or line < 0:
+        raise argparse.ArgumentTypeError(
+            "GPIO must use gpiochip:line format (for example gpiochip1:9)"
+        )
+    return value
+
+
+class GPSGPIOControl:
+    """Own the L76K wake and active-low reset GPIO lines."""
+
+    def __init__(
+        self,
+        wake_gpio: str,
+        rst_gpio: str,
+        errors: RateLimitedLogger,
+    ) -> None:
+        self.wake_chip, self.wake_line = self._split_spec(wake_gpio)
+        self.rst_chip, self.rst_line = self._split_spec(rst_gpio)
+        self.errors = errors
+        self.asserted = False
+
+    @staticmethod
+    def _split_spec(spec: str) -> tuple[str, int]:
+        chip, line = spec.rsplit(":", 1)
+        return chip, int(line)
+
+    def _holder_pattern(self) -> str:
+        lines = f"{self.wake_line}|{self.rst_line}"
+        return (
+            rf"gpiose[t].*{self.wake_chip}[[:space:]].*"
+            rf"[[:space:]]({lines})=[01]"
+            r"([[:space:]]|$)"
+        )
+
+    def _kill_gpio_holders(self) -> None:
+        try:
+            result = subprocess.run(
+                ["pkill", "-f", self._holder_pattern()],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                LOG.info("Released stale GPS gpioset process")
+            elif result.returncode != 1:
+                self.errors.warning(
+                    "gps-gpio",
+                    "Could not stop stale GPS gpioset process (status %d): %s",
+                    result.returncode,
+                    result.stderr.strip(),
+                )
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.errors.warning(
+                "gps-gpio", "Could not stop stale GPS gpioset process: %s", exc
+            )
+
+    def assert_high(self) -> None:
+        """Remove stale holders and enable the GPS, without blocking startup."""
+        self._kill_gpio_holders()
+        command = [
+            GPIOSET_BIN,
+            "-z",
+            "-c",
+            self.wake_chip,
+            f"{self.wake_line}=1",
+            f"{self.rst_line}=1",
+        ]
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.asserted = True
+            LOG.info(
+                "GPS GPIOs asserted HIGH: %s:%d (WAKE), %s:%d (RST_N)",
+                self.wake_chip,
+                self.wake_line,
+                self.rst_chip,
+                self.rst_line,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.errors.warning(
+                "gps-gpio", "Could not assert GPS GPIOs HIGH: %s", exc
+            )
+
+    def release(self) -> None:
+        """Best-effort shutdown of the GPS control lines to their low state."""
+        if not self.asserted:
+            return
+        self._kill_gpio_holders()
+        command = [
+            GPIOSET_BIN,
+            "-c",
+            self.wake_chip,
+            f"{self.wake_line}=0",
+            f"{self.rst_line}=0",
+        ]
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+            )
+            LOG.info("GPS GPIOs released LOW")
+        except subprocess.TimeoutExpired:
+            # gpioset versions that hold requests until signalled have driven
+            # the lines LOW for one second; terminating them releases the
+            # lines back to their default LOW state.
+            LOG.info("GPS GPIOs held LOW and released")
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.errors.warning(
+                "gps-gpio", "Could not release GPS GPIOs LOW: %s", exc
+            )
+        finally:
+            self.asserted = False
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Composite DVB-S2 video and BPSK telemetry transmitter"
@@ -131,6 +263,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--serial")
     parser.add_argument("--gps-port", default="/dev/ttyS0")
     parser.add_argument("--gps-baud", type=int, default=9600)
+    parser.add_argument(
+        "--gps-wake-gpio",
+        type=_gpio_spec,
+        default="gpiochip1:9",
+        help="L76K GPS_WAKE control as gpiochip:line (default: gpiochip1:9)",
+    )
+    parser.add_argument(
+        "--gps-rst-gpio",
+        type=_gpio_spec,
+        default="gpiochip1:14",
+        help="L76K GPS_RST_N control as gpiochip:line (default: gpiochip1:14)",
+    )
     parser.add_argument("--video-udp", type=int, default=5000)
     parser.add_argument(
         "--video-size",
@@ -207,6 +351,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--video-udp must be between 1 and 65535")
     if args.gps_baud <= 0:
         parser.error("--gps-baud must be positive")
+    if (
+        args.gps_wake_gpio.rsplit(":", 1)[0]
+        != args.gps_rst_gpio.rsplit(":", 1)[0]
+    ):
+        parser.error("--gps-wake-gpio and --gps-rst-gpio must use the same gpiochip")
 
     bpsk_sps = args.sample_rate / BPSK_SYMBOL_RATE
     if bpsk_sps < 2 or not np.isclose(
@@ -447,9 +596,15 @@ class Dvbs2Pipeline:
         self.errors = errors
         self.ffmpeg_proc: subprocess.Popen | None = None
         self.tx_proc: subprocess.Popen | None = None
+        self.tx_stderr = None
+        self.ffmpeg_stderr = None
         self.restart_count = 0
         self.next_restart = 0.0
         self.failed = False
+        self.total_requested = 0
+        self.total_received = 0
+        self.underflow_pads = 0
+        self.last_stats_time = time.monotonic()
 
     def _tx_command(self) -> list[str]:
         tsrate = getattr(self.args, "tsrate", None)
@@ -508,16 +663,18 @@ class Dvbs2Pipeline:
         tx_cmd = self._tx_command()
         LOG.info("Starting DVB-S2 encoder: %s", shlex.join(tx_cmd))
         # We'll feed data via ffmpeg → tx.py stdin pipe
+        self.tx_stderr = open("/tmp/tx_dvbs2_stderr.log", "ab")
         self.tx_proc = subprocess.Popen(
             tx_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, close_fds=True, bufsize=0,
+            stderr=self.tx_stderr, close_fds=True, bufsize=0,
         )
 
         # Start ffmpeg, pipe its stdout into tx.py's stdin
         ff_cmd = self._ffmpeg_command()
         LOG.info("Starting ffmpeg: %s", shlex.join(ff_cmd))
+        self.ffmpeg_stderr = open("/tmp/tx_ffmpeg_stderr.log", "ab")
         self.ffmpeg_proc = subprocess.Popen(
-            ff_cmd, stdout=self.tx_proc.stdin, stderr=subprocess.DEVNULL,
+            ff_cmd, stdout=self.tx_proc.stdin, stderr=self.ffmpeg_stderr,
             close_fds=True,
         )
         self.tx_proc.stdin.close()  # tx.py reads from pipe, not us
@@ -560,6 +717,7 @@ class Dvbs2Pipeline:
         self.next_restart = now + PROCESS_RESTART_SECONDS
 
     def read_samples(self, count: int) -> np.ndarray:
+        self.total_requested += count
         byte_count = count * 8
         samples = np.empty(count, dtype=np.complex64)
         sample_bytes = memoryview(samples).cast("B")
@@ -579,8 +737,10 @@ class Dvbs2Pipeline:
             received += amount
 
         received_samples = received // 8
+        self.total_received += received_samples
         if received_samples == count:
             return samples
+        self.underflow_pads += 1
         samples[received_samples:] = 0
         self.errors.warning(
             "dvbs2-underflow",
@@ -588,6 +748,39 @@ class Dvbs2Pipeline:
             count - received_samples,
         )
         return samples
+
+    def debug_stats(self) -> str:
+        now = time.monotonic()
+        elapsed = now - self.last_stats_time
+        received_rate = (
+            self.total_received / elapsed if elapsed > 0.0 else 0.0
+        )
+        received_percent = (
+            100.0 * self.total_received / self.total_requested
+            if self.total_requested
+            else 0.0
+        )
+        tx_state = (
+            "alive"
+            if self.tx_proc is not None and self.tx_proc.poll() is None
+            else "DEAD"
+        )
+        ffmpeg_state = (
+            "alive"
+            if self.ffmpeg_proc is not None and self.ffmpeg_proc.poll() is None
+            else "DEAD"
+        )
+        stats = (
+            f"DVB-S2 enc: rate={received_rate / 1e6:.2f}/"
+            f"{self.args.sample_rate / 1e6:.2f} MS/s "
+            f"({received_percent:.1f}%), underflow={self.underflow_pads} pads, "
+            f"tx={tx_state}, ffmpeg={ffmpeg_state}, "
+            f"restarts={self.restart_count}"
+        )
+        self.total_requested = 0
+        self.total_received = 0
+        self.last_stats_time = now
+        return stats
 
     def close(self) -> None:
         # Kill ffmpeg first
@@ -608,6 +801,11 @@ class Dvbs2Pipeline:
                 self.tx_proc.kill()
                 self.tx_proc.wait(timeout=2)
             self.tx_proc = None
+        for stderr_name in ("tx_stderr", "ffmpeg_stderr"):
+            stderr_file = getattr(self, stderr_name)
+            if stderr_file is not None:
+                stderr_file.close()
+                setattr(self, stderr_name, None)
 
 
 class FfmpegProcess:
@@ -744,6 +942,11 @@ class CompositeTransmitter:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.errors = RateLimitedLogger()
+        self.gps_gpio = GPSGPIOControl(
+            args.gps_wake_gpio,
+            args.gps_rst_gpio,
+            self.errors,
+        )
         self.gps = GPSConnection(args.gps_port, args.gps_baud, self.errors)
         self.dvbs2 = Dvbs2Pipeline(args, self.errors)
         remote_host = "127.0.0.1"
@@ -762,6 +965,7 @@ class CompositeTransmitter:
         self.stream = None
         self.soapy = None
         self.stop_requested = False
+        self._last_debug_log = 0.0
         self.mixer_phase = 0.0
         self.sequence = 0
         self.bpsk_cycle = np.empty(0, dtype=np.complex64)
@@ -954,60 +1158,68 @@ class CompositeTransmitter:
         LOG.info("Reference DVB-S2 pipeline stopped")
 
     def run(self) -> None:
-        # GNU Radio mode: replaces the entire composite loop
-        if self.args.use_gr and self.args.no_bpsk:
-            self._run_gr_mode()
-            return
-
-        chunk_samples = max(
-            4096, int(round(self.args.sample_rate * CHUNK_SECONDS))
-        )
-        if not self.args.no_bpsk and not self.args.no_video:
-            _frequency_oscillators(
-                chunk_samples, self.args.offset, self.args.sample_rate
-            )
+        self.gps_gpio.assert_high()
         try:
-            self._open_sdr()
-            if not self.args.no_video:
-                self.dvbs2.start()
-            while not self.stop_requested:
-                if not self.args.no_bpsk:
-                    self.gps.poll()
-                if not self.args.no_video:
-                    self.dvbs2.ensure_running()
-                    dvbs2_iq = self.dvbs2.read_samples(chunk_samples)
-                else:
-                    dvbs2_iq = np.zeros(chunk_samples, dtype=np.complex64)
+            # GNU Radio mode: replaces the entire composite loop
+            if self.args.use_gr and self.args.no_bpsk:
+                self._run_gr_mode()
+                return
 
-                if self.args.no_bpsk:
-                    dvbs2_iq *= DVBS2_LEVEL
-                    composite = dvbs2_iq
-                else:
-                    bpsk_iq = self._next_bpsk_samples(chunk_samples)
+            chunk_samples = max(
+                4096, int(round(self.args.sample_rate * CHUNK_SECONDS))
+            )
+            if not self.args.no_bpsk and not self.args.no_video:
+                _frequency_oscillators(
+                    chunk_samples, self.args.offset, self.args.sample_rate
+                )
+            try:
+                self._open_sdr()
+                if not self.args.no_video:
+                    self.dvbs2.start()
+                while not self.stop_requested:
+                    if not self.args.no_bpsk:
+                        self.gps.poll()
                     if not self.args.no_video:
-                        composite, self.mixer_phase = frequency_interleave(
-                            dvbs2_iq,
-                            bpsk_iq,
-                            self.args.offset,
-                            self.args.sample_rate,
-                            self.mixer_phase,
-                        )
+                        self.dvbs2.ensure_running()
+                        dvbs2_iq = self.dvbs2.read_samples(chunk_samples)
+                        now = time.monotonic()
+                        if now - self._last_debug_log >= 5.0:
+                            LOG.info("[DVBS2] %s", self.dvbs2.debug_stats())
+                            self._last_debug_log = now
                     else:
-                        composite = np.zeros(
-                            chunk_samples, dtype=np.complex64
-                        )
-                        composite[: len(bpsk_iq)] = bpsk_iq
-                self._write_samples(composite)
+                        dvbs2_iq = np.zeros(chunk_samples, dtype=np.complex64)
+
+                    if self.args.no_bpsk:
+                        dvbs2_iq *= DVBS2_LEVEL
+                        composite = dvbs2_iq
+                    else:
+                        bpsk_iq = self._next_bpsk_samples(chunk_samples)
+                        if not self.args.no_video:
+                            composite, self.mixer_phase = frequency_interleave(
+                                dvbs2_iq,
+                                bpsk_iq,
+                                self.args.offset,
+                                self.args.sample_rate,
+                                self.mixer_phase,
+                            )
+                        else:
+                            composite = np.zeros(
+                                chunk_samples, dtype=np.complex64
+                            )
+                            composite[: len(bpsk_iq)] = bpsk_iq
+                    self._write_samples(composite)
+            finally:
+                if self.sdr is not None and self.stream is not None:
+                    try:
+                        self.sdr.deactivateStream(self.stream)
+                    finally:
+                        self.sdr.closeStream(self.stream)
+                if not self.args.no_video:
+                    self.dvbs2.close()
+                self.gps.close()
+                LOG.info("Composite transmitter stopped")
         finally:
-            if self.sdr is not None and self.stream is not None:
-                try:
-                    self.sdr.deactivateStream(self.stream)
-                finally:
-                    self.sdr.closeStream(self.stream)
-            if not self.args.no_video:
-                self.dvbs2.close()
-            self.gps.close()
-            LOG.info("Composite transmitter stopped")
+            self.gps_gpio.release()
 
 
 def main(argv: list[str] | None = None) -> int:

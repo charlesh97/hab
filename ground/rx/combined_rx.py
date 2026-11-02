@@ -160,6 +160,9 @@ class Dvbs2Pipeline:
         self.process: subprocess.Popen | None = None
         self.write_fd: int | None = None
         self.restart_count = 0
+        self.bytes_written = 0
+        self.fifo_full_drops = 0
+        self.last_stats_time = time.monotonic()
 
     def _ensure_fifo(self) -> None:
         try:
@@ -275,6 +278,7 @@ class Dvbs2Pipeline:
                 if remaining > 0:
                     select.select([], [self.write_fd], [], min(0.01, remaining))
                     continue
+                self.fifo_full_drops += 1
                 self.errors.warning(
                     "fifo-full",
                     "DVB-S2 FIFO full; dropped %d sample bytes",
@@ -289,6 +293,28 @@ class Dvbs2Pipeline:
                     self._restart(os.strerror(exc.errno))
                     return
                 raise
+        self.bytes_written += len(samples) * 8
+
+    def debug_stats(self) -> str:
+        now = time.monotonic()
+        elapsed = now - self.last_stats_time
+        fifo_rate = (
+            self.bytes_written / 8 / elapsed if elapsed > 0.0 else 0.0
+        )
+        child_state = (
+            "alive"
+            if self.process is not None and self.process.poll() is None
+            else "DEAD"
+        )
+        stats = (
+            f"DVB-S2 rx: fifo={fifo_rate / 1e6:.2f}/"
+            f"{self.args.sample_rate / 1e6:.2f} MS/s, "
+            f"fifo_full={self.fifo_full_drops} drops, "
+            f"child={child_state}, restarts={self.restart_count}"
+        )
+        self.bytes_written = 0
+        self.last_stats_time = now
+        return stats
 
     def close(self) -> None:
         if self.write_fd is not None:
@@ -519,6 +545,17 @@ class CompositeReceiver:
                             bridge.wait(timeout=2)
                     break
                 self.video_bridge = bridge
+            bridge_state = (
+                "SERVING"
+                if self.video_bridge is not None
+                and self.video_bridge.poll() is None
+                else "none"
+            )
+            LOG.info(
+                "[DVBS2] %s, bridge=%s",
+                self.dvbs2.debug_stats(),
+                bridge_state,
+            )
             time.sleep(5)
 
     def _channel_filter_taps(self) -> np.ndarray:

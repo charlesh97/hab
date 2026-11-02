@@ -14,6 +14,8 @@ from ground.rx.combined_rx import (
     CHUNK_SAMPLES,
     VIDEO_PORT,
     CompositeReceiver,
+    Dvbs2Pipeline,
+    RateLimitedLogger,
     parse_args,
 )
 from ground.rx.demod import PacketDecoder
@@ -235,6 +237,62 @@ def test_no_bpsk_mode_does_not_initialize_channel_filter() -> None:
     assert not hasattr(receiver, "channel_taps")
 
 
+def test_dvbs2_fifo_write_and_debug_stats() -> None:
+    args = parse_args(["--sample-rate", "4e6"])
+    pipeline = Dvbs2Pipeline(args, RateLimitedLogger())
+    pipeline.process = mock.Mock()
+    pipeline.process.poll.return_value = None
+    pipeline.write_fd = 42
+    samples = np.zeros(16, dtype=np.complex64)
+
+    with mock.patch(
+        "ground.rx.combined_rx.os.write", return_value=samples.nbytes
+    ):
+        pipeline.write(samples)
+
+    assert pipeline.bytes_written == samples.nbytes
+    assert pipeline.fifo_full_drops == 0
+
+    pipeline.last_stats_time = 100.0
+    pipeline.bytes_written = 19_600_000 * 8
+    pipeline.restart_count = 2
+    with mock.patch(
+        "ground.rx.combined_rx.time.monotonic", return_value=105.0
+    ):
+        stats = pipeline.debug_stats()
+
+    assert stats == (
+        "DVB-S2 rx: fifo=3.92/4.00 MS/s, fifo_full=0 drops, "
+        "child=alive, restarts=2"
+    )
+    assert pipeline.bytes_written == 0
+    assert pipeline.last_stats_time == 105.0
+
+
+def test_dvbs2_fifo_full_increments_drop_counter() -> None:
+    pipeline = Dvbs2Pipeline(
+        parse_args([]), mock.Mock(spec=RateLimitedLogger)
+    )
+    pipeline.process = mock.Mock()
+    pipeline.process.poll.return_value = None
+    pipeline.write_fd = 42
+
+    with (
+        mock.patch(
+            "ground.rx.combined_rx.os.write",
+            side_effect=BlockingIOError,
+        ),
+        mock.patch(
+            "ground.rx.combined_rx.time.monotonic",
+            side_effect=[0.0, 3.0],
+        ),
+    ):
+        pipeline.write(np.zeros(16, dtype=np.complex64))
+
+    assert pipeline.bytes_written == 0
+    assert pipeline.fifo_full_drops == 1
+
+
 def test_video_bridge_spawn_retries_once_when_listener_does_not_bind() -> None:
     receiver = CompositeReceiver(parse_args(["--no-bpsk"]))
     first_bridge = mock.Mock()
@@ -266,6 +324,7 @@ def test_video_bridge_supervisor_replaces_exited_bridge() -> None:
     exited_bridge = mock.Mock()
     exited_bridge.poll.return_value = 0
     replacement = mock.Mock()
+    replacement.poll.return_value = None
     receiver.video_bridge = exited_bridge
     listener = subprocess.CompletedProcess(
         args=[],
@@ -290,6 +349,12 @@ def test_video_bridge_supervisor_replaces_exited_bridge() -> None:
             "ground.rx.combined_rx.time.sleep",
             side_effect=stop_after_check,
         ),
+        mock.patch.object(
+            receiver.dvbs2,
+            "debug_stats",
+            return_value="DVB-S2 rx: stats",
+        ) as debug_stats,
+        mock.patch("ground.rx.combined_rx.LOG.info") as log_info,
     ):
         receiver._video_bridge_supervisor()
 
@@ -322,6 +387,12 @@ def test_video_bridge_supervisor_replaces_exited_bridge() -> None:
         capture_output=True,
         text=True,
         timeout=5,
+    )
+    debug_stats.assert_called_once_with()
+    log_info.assert_called_once_with(
+        "[DVBS2] %s, bridge=%s",
+        "DVB-S2 rx: stats",
+        "SERVING",
     )
 
 

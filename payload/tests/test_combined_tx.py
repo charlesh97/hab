@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import struct
 import time
 import unittest
@@ -14,6 +15,7 @@ from payload.tx.combined_tx import (
     CompositeTransmitter,
     Dvbs2Pipeline,
     FfmpegProcess,
+    GPSGPIOControl,
     RateLimitedLogger,
     build_bpsk_cycle,
     crc16,
@@ -176,6 +178,8 @@ class CompositeDSPTests(unittest.TestCase):
         self.assertEqual(args.sym_rate, 2e6)
         self.assertEqual(args.tsrate, 1_930_653)
         self.assertTrue(args.pilots)
+        self.assertEqual(args.gps_wake_gpio, "gpiochip1:9")
+        self.assertEqual(args.gps_rst_gpio, "gpiochip1:14")
 
         pipeline = Dvbs2Pipeline(args, RateLimitedLogger())
         command = pipeline._tx_command()
@@ -271,6 +275,81 @@ class CompositeDSPTests(unittest.TestCase):
 
         np.testing.assert_array_equal(actual, expected)
         self.assertGreater(stdout.read_count, 1)
+        self.assertEqual(pipeline.total_requested, len(expected))
+        self.assertEqual(pipeline.total_received, len(expected))
+        self.assertEqual(pipeline.underflow_pads, 0)
+
+    def test_dvbs2_read_tracks_underflow_and_debug_stats(self) -> None:
+        args = parse_args(["--sample-rate", "4e6"])
+        pipeline = Dvbs2Pipeline(args, RateLimitedLogger())
+        available = np.arange(6, dtype=np.float32).astype(np.complex64)
+        pipeline.tx_proc = mock.Mock(stdout=io.BytesIO(available.tobytes()))
+
+        actual = pipeline.read_samples(10)
+
+        np.testing.assert_array_equal(actual[:6], available)
+        np.testing.assert_array_equal(actual[6:], np.zeros(4, np.complex64))
+        self.assertEqual(pipeline.total_requested, 10)
+        self.assertEqual(pipeline.total_received, 6)
+        self.assertEqual(pipeline.underflow_pads, 1)
+
+        pipeline.last_stats_time = 100.0
+        pipeline.total_requested = 20_000_000
+        pipeline.total_received = 19_720_000
+        pipeline.underflow_pads = 12
+        pipeline.restart_count = 2
+        pipeline.tx_proc = mock.Mock()
+        pipeline.tx_proc.poll.return_value = None
+        pipeline.ffmpeg_proc = mock.Mock()
+        pipeline.ffmpeg_proc.poll.return_value = 1
+
+        with mock.patch(
+            "payload.tx.combined_tx.time.monotonic", return_value=105.0
+        ):
+            stats = pipeline.debug_stats()
+
+        self.assertEqual(
+            stats,
+            "DVB-S2 enc: rate=3.94/4.00 MS/s (98.6%), "
+            "underflow=12 pads, tx=alive, ffmpeg=DEAD, restarts=2",
+        )
+        self.assertEqual(pipeline.total_requested, 0)
+        self.assertEqual(pipeline.total_received, 0)
+        self.assertEqual(pipeline.last_stats_time, 105.0)
+
+    def test_dvbs2_start_captures_child_stderr(self) -> None:
+        pipeline = Dvbs2Pipeline(parse_args([]), RateLimitedLogger())
+        tx_process = mock.Mock()
+        tx_process.poll.return_value = 0
+        ffmpeg_process = mock.Mock()
+        ffmpeg_process.poll.return_value = 0
+        tx_stderr = mock.Mock()
+        ffmpeg_stderr = mock.Mock()
+
+        with (
+            mock.patch(
+                "builtins.open",
+                side_effect=[tx_stderr, ffmpeg_stderr],
+            ) as open_file,
+            mock.patch(
+                "payload.tx.combined_tx.subprocess.Popen",
+                side_effect=[tx_process, ffmpeg_process],
+            ) as popen,
+        ):
+            pipeline.start()
+            pipeline.close()
+
+        self.assertEqual(
+            open_file.call_args_list,
+            [
+                mock.call("/tmp/tx_dvbs2_stderr.log", "ab"),
+                mock.call("/tmp/tx_ffmpeg_stderr.log", "ab"),
+            ],
+        )
+        self.assertIs(popen.call_args_list[0].kwargs["stderr"], tx_stderr)
+        self.assertIs(popen.call_args_list[1].kwargs["stderr"], ffmpeg_stderr)
+        tx_stderr.close.assert_called_once_with()
+        ffmpeg_stderr.close.assert_called_once_with()
 
     def test_frequency_interleave_fits_realtime_chunk_budget(self) -> None:
         sample_rate = 8_000_000
@@ -326,6 +405,60 @@ class CompositeDSPTests(unittest.TestCase):
                 command[command.index(option) + 1],
                 "752000",
             )
+
+    def test_gps_gpio_assert_and_release_commands(self) -> None:
+        errors = mock.Mock(spec=RateLimitedLogger)
+        gpio = GPSGPIOControl("gpiochip1:9", "gpiochip1:14", errors)
+
+        with mock.patch(
+            "payload.tx.combined_tx.subprocess.run"
+        ) as run_command:
+            run_command.return_value.returncode = 1
+            gpio.assert_high()
+            gpio.release()
+
+        self.assertEqual(run_command.call_count, 4)
+        startup_kill = run_command.call_args_list[0].args[0]
+        self.assertEqual(startup_kill[:2], ["pkill", "-f"])
+        self.assertEqual(
+            startup_kill[2],
+            r"gpiose[t].*gpiochip1[[:space:]].*[[:space:]](9|14)=[01]([[:space:]]|$)",
+        )
+        self.assertNotIn("gpioset", startup_kill[2])
+        self.assertEqual(
+            run_command.call_args_list[1].args[0],
+            [
+                "/usr/bin/gpioset",
+                "-z",
+                "-c",
+                "gpiochip1",
+                "9=1",
+                "14=1",
+            ],
+        )
+        self.assertEqual(
+            run_command.call_args_list[3].args[0],
+            [
+                "/usr/bin/gpioset",
+                "-c",
+                "gpiochip1",
+                "9=0",
+                "14=0",
+            ],
+        )
+
+    def test_gps_gpio_failure_warns_and_continues(self) -> None:
+        errors = mock.Mock(spec=RateLimitedLogger)
+        gpio = GPSGPIOControl("gpiochip1:9", "gpiochip1:14", errors)
+
+        with mock.patch(
+            "payload.tx.combined_tx.subprocess.run",
+            side_effect=[mock.Mock(returncode=1), FileNotFoundError("gpioset")],
+        ):
+            gpio.assert_high()
+
+        errors.warning.assert_called_once()
+        self.assertEqual(errors.warning.call_args.args[0], "gps-gpio")
 
 
 if __name__ == "__main__":

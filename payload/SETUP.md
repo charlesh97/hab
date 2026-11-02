@@ -159,8 +159,12 @@ dtc -I dts -O dtb -o /boot/dtb/rockchip/overlay/rk3528-<name>.dtbo rk3528-<name>
 
 Both pins must be driven HIGH for GPS operation:
 ```bash
-sudo gpioset -t0 -c gpiochip1 9=1 14=1
+sudo gpioset -z -c gpiochip1 9=1 14=1
 ```
+
+`payload/tx/combined_tx.py` now performs this automatically at startup and
+releases both lines LOW during a clean shutdown. The defaults can be overridden
+with `--gps-wake-gpio gpiochip1:9` and `--gps-rst-gpio gpiochip1:14`.
 
 ### 2.5 GPIO Control Lines — Heater + PA (Power Amplifier)
 
@@ -257,7 +261,7 @@ This was the single hardest bug to diagnose during bringup:
 ```bash
 # 1. Set control pins
 sudo pkill gpioset  # kill any stale daemon
-sudo gpioset -t0 -c gpiochip1 9=1 14=1   # WAKE HIGH, RST_N HIGH
+sudo gpioset -z -c gpiochip1 9=1 14=1   # WAKE HIGH, RST_N HIGH
 
 # 2. Verify pinmux
 cat /sys/kernel/debug/pinctrl/pinctrl-rockchip-pinctrl/pinmux-pins | grep -E "gpio0-[01]"
@@ -308,11 +312,10 @@ Phase 1D — GPS NMEA Test
 
 ---
 
-## 8. Boot-Time Automation (TODO)
+## 8. Boot-Time Automation
 
-The following should run at boot for full autonomy:
-1. Assert GPS_WAKE and GPS_RST_N HIGH (gpioset daemon)
-2. Optionally: configure GPS update rate / EASY / LOCUS via PMTK
-3. Start payload main.py as a systemd service
+Starting `payload/main.py` now asserts GPS_WAKE and GPS_RST_N HIGH before the
+GPS serial connection is opened, so no separate boot-time `gpioset` command is
+required. GPS update rate / EASY / LOCUS configuration remains optional.
 
-Not yet implemented — GPS control pins currently set manually via SSH.
+Run `payload/main.py` from the payload's boot service for full autonomy.

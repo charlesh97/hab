@@ -25,23 +25,33 @@ its ceiling — comfortable margin.
 
 ## 1. Transmit (on the Rock 2A)
 
-Either run the committed script or the equivalent one-liner:
+**Use the restart script** — it kills stale TX processes (composite TX, DVB-S2 encoder,
+ffmpeg, GPS gpioset holders) and starts a fresh video-only TX:
 
 ```bash
-# /home/hab/start_tx.sh  (or directly:)
+ssh rock2a "bash /home/hab/restart_tx.sh"
+# repo source: scripts/restart_tx.sh  (deployed to /home/hab/restart_tx.sh)
+# log: /tmp/tx_video.log
+```
+
+It re-asserts the GPS GPIOs itself (`gpiochip1:9` WAKE, `gpiochip1:14` RST_N) — no
+manual `gpioset` needed. The equivalent one-liner:
+
+```bash
 cd /home/hab/git/hab
 nohup python3 -u payload/tx/main.py \
   --center-freq 914e6 \
-  --offset 700e3 \
   --sample-rate 4e6 \
   --sym-rate 1e6 \
   --rrc-delay 1 \
   --video-size 640x360 \
   --no-timestamp-overlay \
   --video-source testsrc \
+  --no-bpsk \
   --serial 60a464dc3674640f \
-  > /tmp/tx_e2e.log 2>&1 &
+  > /tmp/tx_video.log 2>&1 &
 ```
+
 
 `payload/tx/main.py` is a thin wrapper over `payload/tx/combined_tx.py`.
 
@@ -76,24 +86,24 @@ nohup python3 -u payload/tx/main.py \
 
 ## 2. Receive (on the Mac)
 
-**First**: kill any stale ffmpeg bridge squatting on UDP:1234 — it will
-steal the TS stream and the RX child never sees it:
+**Use the restart script** — it kills the stale RX (combined_rx, DVB-S2 child,
+hackrf_transfer) plus any ffmpeg bridge squatting on UDP:1234/:8001, then starts fresh:
 
 ```bash
-pkill -f "udp://127.0.0.1:1234"   # safe here: local, not via ssh
+cd ~/git/hab && bash scripts/restart_rx.sh
+# log: /tmp/rx.log
 ```
 
-**Then** launch the composite RX. Use `exec … > log 2>&1` (plain `nohup … &`
-fails with exit −1):
+The equivalent manual launch. Use `exec … > log 2>&1` (plain `nohup … &` fails with exit −1):
 
 ```bash
 cd ~/git/hab
-source dev/setup_env.sh
+PYTHONPATH=/opt/homebrew/lib/python3.14/site-packages \
 exec /opt/homebrew/bin/python3.14 -u ground/rx/combined_rx.py \
   --center-freq 914e6 \
-  --offset 700000 \
   --sample-rate 4e6 \
   --sym-rate 1e6 \
+  --no-bpsk \
   --serial 60a464dc3606610f \
   --lna 32 --vga 40 --amp \
   > /tmp/rx.log 2>&1
@@ -122,9 +132,19 @@ exec /opt/homebrew/bin/python3.14 -u ground/rx/combined_rx.py \
 
 ### Health signals (in `/tmp/rx.log`)
 
-- **BPSK**: `Telemetry` line ~1/sec with `seq=` increasing; FO locked around `−7 kHz` (HackRF clock offset) — expect it, don't chase it.
-- **DVB-S2**: TS flows at ~900 kbps (93% of the ~965 kbps muxrate); the RX child logs bbdeheader activity.
+- **DVB-S2 live stats** — one line every 5 s:
+  `[DVBS2] DVB-S2 rx: fifo=4.00/4.00 MS/s, fifo_full=0 drops, child=alive, restarts=0, bridge=SERVING`
+  - `fifo` = IQ rate fed to the decoder vs requested — below target means the HackRF/USB is starving
+  - `fifo_full` drops = decoder can't keep up (drops IQ, corrupting TS)
+  - `child`/`restarts` = DVB-S2 decoder process health
+  - `bridge` = `WAITING` (listening, no client) / `SERVING` (client streaming) / `DOWN`
+- **TX side** (`ssh rock2a "tail -f /tmp/tx_video.log"`) — same cadence:
+  `[DVBS2] DVB-S2 enc: rate=4.00/4.00 MS/s (100.0%), underflow=0 pads, tx=alive, ffmpeg=alive, restarts=0`
+  - `rate` below 100% + `underflow` pads = encoder starving (pads = silence/garbage in TS)
+  - Encoder/ffmpeg child stderr is captured to `/tmp/tx_dvbs2_stderr.log` and `/tmp/tx_ffmpeg_stderr.log`
+- **BPSK** (when enabled): `Telemetry` line ~1/sec with `seq=` increasing; FO locked around `−7 kHz` (HackRF clock offset) — expect it, don't chase it.
 - Watch for `BPSK decoder falling behind`, `Unknown BPSK frame type` spam, pacing overflow/underflow.
+- bbdeheader `upl != 188 bytes` / `dfl not a multiple of 8` = TS corruption clusters over RF.
 
 ---
 
@@ -196,6 +216,33 @@ duty. The live capture will show ~100% duty too; the Rock 2A encoder gaps
 
 ---
 
+## 6. Dashboard (on the Mac)
+
+The ground dashboard lives in `ground/dashboard/` (server on `:8000`, Preact/TS SPA).
+Only this path is valid — the pre-reorg `~/git/hab/dashboard/` is dead code.
+
+```bash
+cd ~/git/hab/ground/dashboard/server
+.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+# browse http://<mac-ip>:8000   (localhost works; charleslab.local does not resolve)
+```
+
+Video status is **decoupled from the dashboard's own receiver manager**: the SPA
+polls `GET /api/video-status` every 5 s and the server answers by `lsof`-inspecting
+:8001 (never `connect()` — that would consume the one-shot bridge). It reports up
+when the bridge holds **any** socket on :8001 (LISTEN *or* ESTABLISHED), so the feed
+stays mounted while a client streams. `up:true` means "a bridge is there", not
+"frames are decodable" — if the pane is blank while `up:true`, check the `[DVBS2]`
+stats in `/tmp/rx.log` and the TX log.
+
+Map behavior: packets are always logged, but no-fix / zero coordinates are not
+plotted (map shows `NO FIX`) — `useHabApi.ts` + `MapCard.tsx`.
+
+Note: `ground/dashboard/server/hab_data.db` grows unbounded (~1.9 GB / ~7 M packets
+as of Aug 2026). It is gitignored runtime data; prune or VACUUM if disk matters.
+
+---
+
 ## Known issues & gotchas
 
 1. **Rock 2A camera is dead for sustained streaming** — `/dev/video0`
@@ -224,14 +271,19 @@ duty. The live capture will show ~100% duty too; the Rock 2A encoder gaps
 8. **System `python3` exits 1** on the Mac — always
    `/opt/homebrew/bin/python3.14` with `PYTHONPATH` from `dev/setup_env.sh`.
 9. **pyserial not in the base env** for test runs — `PYTHONPATH=/tmp/compvenv/lib/python3.14/site-packages` (tests import `serial`).
+10. **`~/hab` is dead** — an abandoned July-20 scaffold, separate git repo pointing at
+    `charleshood/hab` (different org), single "init" commit. The project is `~/git/hab`
+    (`charlesh97/hab`). Nothing references `~/hab`; archived to `~/Archive/`.
+11. **Rock 2A `/home/hab/git/hab` is a loose scp'd copy, not a git clone** — deploy by
+    scp'ing `payload/tx/combined_tx.py` and comparing md5. `restart_tx.sh` lives at
+    `/home/hab/restart_tx.sh` (source: `scripts/restart_tx.sh`).
 
 ## Tests
 
 ```bash
 cd ~/git/hab
-source dev/setup_env.sh
-PYTHONPATH=/tmp/compvenv/lib/python3.14/site-packages:$PYTHONPATH \
+PYTHONPATH=/tmp/compvenv/lib/python3.14/site-packages \
   /opt/homebrew/bin/python3.14 -m pytest \
   ground/rx/tests/test_combined_rx.py payload/tests/test_combined_tx.py -q
-# 21 passed
+# 33 passed
 ```
