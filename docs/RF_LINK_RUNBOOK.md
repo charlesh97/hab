@@ -91,7 +91,7 @@ hackrf_transfer) plus any ffmpeg bridge squatting on UDP:1234/:8001, then starts
 
 ```bash
 cd ~/git/hab && bash scripts/restart_rx.sh
-# log: /tmp/rx.log
+# log: /tmp/rx.log — also brings up the dashboard on :8000 if it isn't listening
 ```
 
 The equivalent manual launch. Use `exec … > log 2>&1` (plain `nohup … &` fails with exit −1):

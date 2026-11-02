@@ -47,6 +47,16 @@ RX_PID=$!
 echo "RX started (pid $RX_PID) — log: $LOG"
 echo "---"
 
+# Ground dashboard on :8000 (skip if something is already listening)
+if ! lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "=== starting dashboard on :8000 ==="
+    ( cd /Users/charleslab/git/hab/ground/dashboard/server && \
+      nohup .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 \
+        > /tmp/dashboard.log 2>&1 & )
+    sleep 4
+    lsof -nP -iTCP:8000 -sTCP:LISTEN | tail -1
+fi
+
 sleep 8
 echo "=== running processes ==="
 pgrep -fl 'combined_rx[.]py|dvbs2/dvbs2/rx[.]py|hackrf_transfer|udp://127.0.0.1:123[4]' | grep -v pgrep
